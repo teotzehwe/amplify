@@ -116,6 +116,17 @@ function parseStances(input) {
   return out;
 }
 
+/** Per-song chair requests: { [songId]: 'Guitar' }. */
+function parsePicks(input) {
+  const out = {};
+  if (!input || typeof input !== 'object') return out;
+  for (const [songId, instrument] of Object.entries(input).slice(0, 500)) {
+    const name = str(instrument, { max: 40 });
+    if (name) out[str(songId, { max: 40 })] = name;
+  }
+  return out;
+}
+
 function parseLimits(input = {}) {
   return {
     maxSongs: intOrNull(input.maxSongs, { min: 1, max: 50 }),
@@ -204,6 +215,7 @@ route('POST', /^\/api\/join$/, (ctx) => {
     removed: false,
     instruments: parseInstruments(ctx.body.instruments),
     stances: parseStances(ctx.body.stances),
+    picks: parsePicks(ctx.body.picks),
     unknownStance: oneOf(ctx.body.unknownStance, STANCES, 'maybe'),
     limits: parseLimits(ctx.body.limits),
     notes: str(ctx.body.notes, { max: 280 }),
@@ -226,6 +238,13 @@ route('PATCH', /^\/api\/players\/([\w-]+)$/, (ctx) => {
     if (body.name != null) target.name = str(body.name, { max: 60, field: 'Name', required: true });
     if (body.instruments != null) target.instruments = parseInstruments(body.instruments);
     if (body.stances != null) target.stances = { ...target.stances, ...parseStances(body.stances) };
+    if (body.picks != null) target.picks = { ...target.picks, ...parsePicks(body.picks) };
+    // A withdrawal has to be able to clear a song, which a merge cannot express.
+    for (const songId of Array.isArray(body.clearSongs) ? body.clearSongs.slice(0, 50) : []) {
+      const id = str(songId, { max: 40 });
+      delete target.stances[id];
+      delete target.picks[id];
+    }
     if (body.unknownStance != null) target.unknownStance = oneOf(body.unknownStance, STANCES, target.unknownStance);
     if (body.limits != null) target.limits = parseLimits(body.limits);
     if (body.notes != null) target.notes = str(body.notes, { max: 280 });

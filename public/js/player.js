@@ -1,6 +1,6 @@
 /* The musician's phone: sign up, say what you're comfortable with, see when you're up. */
 
-import { $, api, el, guard, masthead, pluralize, render, stanceSwitch, subscribe, toast, tokens } from './common.js';
+import { $, api, el, guard, masthead, pluralize, render, subscribe, toast, tokens } from './common.js';
 
 const app = $('#app');
 
@@ -130,56 +130,87 @@ function levelSwitch(value, onChange) {
 }
 
 /**
- * The setlist, one comfort switch per song. Unanswered songs are explicitly
- * called out rather than silently assumed — that is the whole point.
+ * The sign-up sheet: one song per submission, as many songs as you like.
+ *
+ * Each row is its own small form — pick the instrument you'd play it on, hit
+ * the button, done. Signing up for one song never commits you to another, and
+ * anything you have not signed up for simply is not a sign-up.
  */
-function songComfort(stances, onChange) {
+function songSignup(you) {
   if (!state.songs.length) {
     return el('div', { class: 'empty' },
-      'No songs posted yet. Sign up now — you can rate the setlist here the moment the host adds it.');
+      'No songs posted yet. The moment the host adds one it appears here to sign up for.');
   }
+
+  const submit = guard(async (songId, instrument) => {
+    await api(`/players/${you.id}`, {
+      method: 'PATCH',
+      body: { stances: { [songId]: 'in' }, picks: instrument ? { [songId]: instrument } : {} },
+    });
+    toast("You're on for it");
+  });
+
+  const withdraw = guard(async (songId) => {
+    await api(`/players/${you.id}`, { method: 'PATCH', body: { clearSongs: [songId] } });
+    toast('Taken off that one');
+  });
 
   const list = el('div', {});
   for (const song of state.songs) {
-    const stance = stances[song.id];
+    const signedUp = you.stances[song.id] === 'in';
+    const chosen = you.picks?.[song.id] || you.instruments[0]?.name;
+    const meta = [song.artist, song.key && `key of ${song.key}`].filter(Boolean).join(' · ');
+
     list.append(
-      el('div', { class: 'song-row' },
+      el('div', { class: `signup-row${signedUp ? ' signup-row--in' : ''}` },
         el('div', { class: 'grow' },
           el('div', { class: 'song-row__title' }, song.title),
-          el('div', { class: 'song-row__meta' },
-            [song.artist, song.key && `key of ${song.key}`].filter(Boolean).join(' · ') || 'No details',
-          ),
+          el('div', { class: 'song-row__meta' }, meta || 'No details'),
         ),
-        stanceSwitch(stance, (next) => {
-          stances[song.id] = stances[song.id] === next ? undefined : next;
-          if (stances[song.id] === undefined) delete stances[song.id];
-          onChange();
-        }),
+
+        signedUp
+          ? el('div', { class: 'row' },
+              el('span', { class: 'tag tag--in' }, `Signed up · ${chosen}`),
+              el('button', {
+                class: 'btn btn--sm btn--quiet',
+                onClick: () => withdraw(song.id),
+              }, 'Withdraw'),
+            )
+          : el('div', { class: 'row row--wrap' },
+              // Only ask which instrument when there is actually a choice.
+              you.instruments.length > 1
+                ? el('select', {
+                    'aria-label': `Instrument for ${song.title}`,
+                    id: `pick-${song.id}`,
+                    value: chosen,
+                  }, you.instruments.map((i) =>
+                    el('option', { value: i.name, selected: i.name === chosen }, i.name)))
+                : null,
+              el('button', {
+                class: 'btn btn--primary btn--sm',
+                onClick: () => submit(
+                  song.id,
+                  you.instruments.length > 1 ? $(`#pick-${song.id}`)?.value : you.instruments[0]?.name,
+                ),
+              }, 'Sign up'),
+            ),
       ),
     );
   }
 
-  const unanswered = state.songs.filter((s) => !stances[s.id]).length;
+  const count = state.songs.filter((s) => you.stances[s.id] === 'in').length;
   return el('div', { class: 'stack' },
     list,
-    unanswered
-      ? el('p', { class: 'section-note' },
-          `${pluralize(unanswered, 'song')} unanswered — those use your fallback below.`)
-      : null,
+    el('p', { class: 'section-note' },
+      count
+        ? `You're signed up for ${pluralize(count, 'song')}. Sign up for as many as you like.`
+        : 'Sign up for one song at a time — as many as you want.'),
   );
 }
 
-/** The boundaries block: fallback stance, personal cap, vocal opt-out, notes. */
+/** The boundaries block: personal cap, vocal opt-out, notes. */
 function boundaries(target, onChange) {
   return el('div', { class: 'stack stack--lg' },
-    el('div', { class: 'field' },
-      el('label', {}, 'Songs you have not rated'),
-      el('p', { class: 'section-note' },
-        'Covers surprise calls and anything added later. Pick "Sit out" and the host will always ask first.'),
-      stanceSwitch(target.unknownStance, (next) => { target.unknownStance = next; onChange(); }, {
-        in: 'Call me anyway', maybe: 'Ask me first', out: 'Leave me out',
-      }),
-    ),
     el('div', { class: 'field' },
       el('label', { for: 'maxSongs' }, 'Cap my turns tonight'),
       el('div', { class: 'row' },
@@ -273,20 +304,12 @@ function signupView() {
     ),
 
     el('section', { class: 'card' },
-      el('div', { class: 'card__head' },
-        el('span', { class: 'step-num' }, '3'),
-        el('h2', {}, "Tonight's songs"),
-        el('span', { class: 'hint' }, 'No wrong answers'),
-      ),
-      el('p', { class: 'section-note', style: { marginBottom: '14px' } },
-        'Sit out is a hard no — you will never be called for it.'),
-      songComfort(draft.stances, redraw),
-    ),
-
-    el('section', { class: 'card' },
-      el('div', { class: 'card__head' }, el('span', { class: 'step-num' }, '4'), el('h2', {}, 'Your limits')),
+      el('div', { class: 'card__head' }, el('span', { class: 'step-num' }, '3'), el('h2', {}, 'Your limits')),
       boundaries(draft, () => {}),
     ),
+
+    el('p', { class: 'section-note center' },
+      'Next you can sign up for songs — one at a time, as many as you like.'),
 
     el('div', { class: 'sticky-bar' },
       el('button', { class: 'btn btn--primary btn--lg btn--block', onClick: submit }, 'Join the jam'),
@@ -316,7 +339,7 @@ function youView(you) {
           el('div', { class: 'kicker' }, "You're up"),
           el('div', { class: 'what' }, `${yourSlot.instrument} · ${song ? song.title : 'Next song'}`),
           el('p', { class: 'muted small', style: { marginTop: '6px' } },
-            'Head up when the host calls it. Not feeling this one? Mark the song "Sit out" below and tell the host.'),
+            'Head up when the host calls it. Changed your mind? Hit Withdraw below and let the host know.'),
         )
       : null,
 
@@ -350,13 +373,12 @@ function youView(you) {
       ),
     ),
 
-    section('songs',
-      ["Tonight's songs",
-        el('span', { class: 'tag' }, `${Object.keys(you.stances).length}/${state.songs.length} rated`)],
-      songComfort(you.stances, () => {
-        save({ stances: you.stances });
-        draw();
-      }),
+    el('section', { class: 'card' },
+      el('div', { class: 'card__head' },
+        el('h2', {}, 'Sign up for songs'),
+        el('span', { class: 'hint' }, 'One song per sign-up'),
+      ),
+      songSignup(you),
     ),
 
     section('instruments', 'Instruments',

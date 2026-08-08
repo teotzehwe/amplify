@@ -80,11 +80,21 @@ function restCheck(player, roundIndex, settings) {
 }
 
 /**
+ * When someone signs up for a song they may name the chair they want. Ranks
+ * the fit: asked for this chair, no preference, or asked for a different one.
+ */
+function chairPreference(player, instrument, song) {
+  const wanted = song ? player.picks?.[song.id] : null;
+  if (!wanted) return 1;
+  return normalizeInstrument(wanted) === normalizeInstrument(instrument) ? 0 : 2;
+}
+
+/**
  * Priority order within a chair. Lower sorts first.
  *
  * Rested players outrank tired ones, then it is straight fairness: fewest
- * turns tonight, then a firm "in" over a "maybe", then longest wait, then
- * who actually leads the instrument, then who arrived first.
+ * turns tonight, then a firm "in" over a "maybe", then the chair they asked
+ * for, then longest wait, then who leads the instrument, then arrival order.
  */
 function rankKey(player, instrument, song, rest) {
   const level = instrumentEntry(player, instrument)?.level || 'comfortable';
@@ -92,6 +102,7 @@ function rankKey(player, instrument, song, rest) {
     rest.rested ? 0 : 1,
     player.stats.plays,
     stanceFor(player, song) === 'in' ? 0 : 1,
+    chairPreference(player, instrument, song),
     -rest.waited,
     LEVEL_RANK[level] ?? 1,
     player.joinedAt,
@@ -198,8 +209,22 @@ export function buildLineup({ players, song, settings, roundIndex, locks = {} })
     taken.add(pinned);
   }
 
-  // Fill the scarcest chairs first — the lone bassist should not be spent on
-  // a guitar seat that four other people could have taken.
+  // Chair requests come next. Someone who signed up saying "I'll play keys on
+  // this one" must actually get keys — otherwise an earlier slot in the
+  // template claims them first and the request is silently lost.
+  for (const slot of slots.filter((s) => !s.playerId && !s.blank)) {
+    const asked = slot.candidates.find(
+      (c) => !taken.has(c.player.id) && chairPreference(c.player, slot.instrument, song) === 0,
+    );
+    if (!asked) continue;
+    slot.playerId = asked.player.id;
+    slot.resting = !asked.rest.rested;
+    slot.reason = `Signed up for ${slot.instrument}`;
+    taken.add(asked.player.id);
+  }
+
+  // Then fill the scarcest remaining chairs first — the lone bassist should not
+  // be spent on a guitar seat that four other people could have taken.
   const open = slots
     .filter((s) => !s.playerId && !s.blank)
     .sort((a, b) => {

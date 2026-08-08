@@ -24,7 +24,9 @@ function defaultState() {
       createdAt: Date.now(),
       restSongs: 1,
       maxConsecutive: 1,
-      maybeCountsAsAvailable: true,
+      // Sign-ups drive the night: by default only people who signed up for a
+      // song can be called for it. The host can widen this in Settings.
+      maybeCountsAsAvailable: false,
       allowSuggestions: true,
       slots: [
         { instrument: 'Vocals', count: 1 },
@@ -51,6 +53,7 @@ function migrate(state) {
   out.players = (state.players || []).map((p) => ({
     limits: {},
     stances: {},
+    picks: {},
     instruments: [],
     unknownStance: 'maybe',
     present: true,

@@ -2,10 +2,10 @@
 
 Sign-ups, comfort levels and a fair rotation for open jam nights.
 
-People add their name and instruments before the jam, say how they feel about
-each song on the list, and Amplify builds the band for every song — spreading
-turns around, keeping anyone who has not played yet at the front of the queue,
-and never calling someone for a song they said they would rather sit out.
+People add their name and instruments once, then sign up for songs one at a
+time as the setlist fills in. Amplify builds the band for each song from
+whoever signed up — spreading turns around, keeping anyone who has not played
+yet at the front of the queue, and never calling someone who did not sign up.
 
 ```bash
 node server.js
@@ -36,22 +36,26 @@ Everything updates live. A song added on the host console appears on every
 phone immediately; a musician marking themselves on a break drops out of the
 next lineup without anyone saying a word.
 
-## Comfort is a boundary, not a preference
+## Signing up, one song at a time
 
-Each person answers three ways per song:
+Signing in to the jam and signing up for a song are two separate things. You
+give your name and instruments once. After that, every song on the setlist gets
+its own **Sign up** button on your phone — one song per sign-up, as many songs
+as you like, whenever you like. New songs appear the moment the host adds them.
 
-- **I'm in** — call me for this one.
-- **Maybe** — I'll play it, but pick someone keen first.
-- **Sit out** — do not call me for this.
+If you play more than one instrument, each sign-up asks which one you want for
+*that* song. Sign up for the ballad on keys and the blues on guitar; Amplify
+seats you where you asked. **Withdraw** takes you off a single song and leaves
+your other sign-ups alone.
 
-**"Sit out" is absolute.** Nothing overrides it: not an empty chair, not a
-half-staffed band, not the host pinning that person into a slot by hand. If a
-song cannot be staffed because of it, Amplify says so and leaves the chair
-open rather than putting someone on stage they did not agree to.
+**Not signing up is a complete answer.** By default nobody is called for a song
+they did not sign up for — not to fill an empty chair, not to staff a half-empty
+band, not by the host pinning them into a slot by hand. If a song cannot be
+staffed, Amplify says so and leaves the chair open rather than putting someone
+on stage who did not put themselves there.
 
-Because nobody rates every song, each person also picks a fallback for songs
-they have not answered — including anything called on the spot later in the
-night. Choose *Leave me out* and unrated songs behave like a "sit out".
+A lineup is a snapshot. If somebody withdraws or goes on a break after it was
+drawn, the host's call sheet flags it in red before the names get read out.
 
 There are three more limits people set for themselves:
 
@@ -61,18 +65,22 @@ There are three more limits people set for themselves:
 
 ## How the queue decides
 
-For each chair, everyone still standing after the comfort rules is ranked:
+For each chair, everyone who signed up is ranked:
 
 1. **Rested before tired** — anyone still inside their rest gap is a last resort.
 2. **Fewest turns tonight** — this is what pulls people who have not played to
    the front, and it is why someone arriving at 10pm is called next.
-3. **A firm "in" before a "maybe"**.
-4. **Longest wait** since they last played.
-5. **Whoever leads the instrument**, then whoever arrived first.
+3. **Signed up before not**.
+4. **The chair they asked for**, ahead of one they did not.
+5. **Longest wait** since they last played.
+6. **Whoever leads the instrument**, then whoever arrived first.
 
-Two more things happen before the lineup is final:
+Three more things happen before the lineup is final:
 
-- **Scarce chairs are filled first.** The only drummer in the room does not get
+- **Requested chairs are honoured first.** If you signed up for a song on keys,
+  you get keys — an earlier slot in the template cannot claim you for vocals
+  and quietly lose your request.
+- **Scarce chairs are filled next.** The only drummer in the room does not get
   spent on a guitar seat that four other people could take.
 - **One repair pass.** If a chair ends up empty but someone already seated could
   cover it — and their own chair has a backup — they are swapped across.
@@ -99,8 +107,9 @@ Turn counts are what drive fairness, so log songs as they happen.
 - **The band** — which chairs to fill (2 guitars, 1 bass, 1 drums…). Songs can
   override the template.
 - **Songs off between turns** — the rest gap. Default 1.
-- **Count "maybe" as available** — turn it off late in the night when you only
-  want firm yeses. "Sit out" is honoured either way.
+- **Also call people who did not sign up** — off by default, which is what makes
+  sign-ups mean something. Turn it on for a loose night where you would rather
+  fill every chair than wait for sign-ups.
 - **Let players suggest songs** — suggestions show who added them.
 - **Reset turn counts** for a second set, or **clear the night** entirely.
 

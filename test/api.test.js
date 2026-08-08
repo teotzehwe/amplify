@@ -154,8 +154,9 @@ test('a full round trip: songs, lineup, and committed turns', async () => {
   const song = await call('/songs', { method: 'POST', body: { title: 'Test Song' }, host: true });
   assert.equal(song.status, 200);
 
-  const drummer = await joinAs('Drummer', ['Drums']);
-  await joinAs('Guitarist', ['Guitar']);
+  // Sign-ups drive the lineup, so both players sign up for this song.
+  const drummer = await joinAs('Drummer', ['Drums'], { stances: { [song.data.id]: 'in' } });
+  await joinAs('Guitarist', ['Guitar'], { stances: { [song.data.id]: 'in' } });
 
   const lineup = await call('/host/lineup', { method: 'POST', body: { songId: song.data.id }, host: true });
   assert.equal(lineup.status, 200);

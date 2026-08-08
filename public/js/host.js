@@ -171,8 +171,8 @@ function songChoice(song) {
       el('div', { class: 'muted small' },
         [song.artist, song.key && `key of ${song.key}`].filter(Boolean).join(' · ') || '—'),
       el('div', { class: 'readiness' },
-        el('span', { class: 'tag tag--in' }, el('i', { class: 'dot dot--in' }), `${r.in} in`),
-        r.maybe ? el('span', { class: 'tag tag--maybe' }, el('i', { class: 'dot dot--maybe' }), `${r.maybe} maybe`) : null,
+        el('span', { class: 'tag tag--in' }, el('i', { class: 'dot dot--in' }), `${r.in} signed up`),
+        r.maybe ? el('span', { class: 'tag' }, `${r.maybe} have not`) : null,
         r.out ? el('span', { class: 'tag tag--out' }, el('i', { class: 'dot dot--out' }), `${r.out} sitting out`) : null,
         r.gaps.length ? el('span', { class: 'tag tag--out' }, `No ${r.gaps.join(', no ')}`) : null,
       ),
@@ -214,10 +214,13 @@ function callSheet(current) {
         ),
       ),
 
-      current.warnings.length
-        ? el('div', { class: 'stack', style: { gap: '8px' } },
-            current.warnings.map((w) => el('div', { class: 'alert alert--warn' }, w)))
-        : null,
+      // A lineup is a snapshot. If someone withdraws or steps out after it was
+      // drawn, say so here rather than letting the host call a name that is no
+      // longer good.
+      el('div', { class: 'stack', style: { gap: '8px' } },
+        staleSeats(current, song).map((w) => el('div', { class: 'alert alert--error' }, w)),
+        current.warnings.map((w) => el('div', { class: 'alert alert--warn' }, w)),
+      ),
 
       el('div', { class: 'stack', style: { gap: '8px' } }, current.slots.map(slotRow)),
 
@@ -244,6 +247,24 @@ function callSheet(current) {
         'Played ✓ counts everyone on stage. Cancel drops the lineup without counting turns.'),
     ),
   );
+}
+
+/**
+ * Seats that have gone stale since the lineup was drawn — someone withdrew
+ * their sign-up or went on a break. Redrawing clears these.
+ */
+function staleSeats(current, song) {
+  const notes = [];
+  for (const slot of current.slots) {
+    const player = slot.playerId ? playerById(slot.playerId) : null;
+    if (!player) continue;
+    if (!player.present) {
+      notes.push(`${player.name} (${slot.instrument}) is on a break now — redraw before calling it.`);
+    } else if (song && player.stances?.[song.id] !== 'in') {
+      notes.push(`${player.name} (${slot.instrument}) withdrew from this song — redraw before calling it.`);
+    }
+  }
+  return notes;
 }
 
 function slotRow(slot) {
@@ -428,9 +449,9 @@ function songAdminCard(song) {
         [song.artist, song.key && `key of ${song.key}`, suggester && `suggested by ${suggester.name}`]
           .filter(Boolean).join(' · ') || '—'),
       el('div', { class: 'readiness' },
-        el('span', { class: 'tag tag--in' }, `${r.in} in`),
-        r.maybe ? el('span', { class: 'tag tag--maybe' }, `${r.maybe} maybe`) : null,
-        r.out ? el('span', { class: 'tag tag--out' }, `${r.out} out`) : null,
+        el('span', { class: 'tag tag--in' }, `${r.in} signed up`),
+        r.maybe ? el('span', { class: 'tag' }, `${r.maybe} have not`) : null,
+        r.out ? el('span', { class: 'tag tag--out' }, `${r.out} sitting out`) : null,
         r.gaps.length
           ? el('span', { class: 'tag tag--out' }, `Cannot staff: ${r.gaps.join(', ')}`)
           : el('span', { class: 'tag tag--in' }, 'Full band available'),
@@ -504,8 +525,8 @@ function settingsTab() {
           onChange: (e) => save({ maybeCountsAsAvailable: e.target.checked }),
         }),
         el('span', { class: 'toggle__track' }),
-        el('span', { class: 'toggle__text' }, 'Count "maybe" as available',
-          el('small', {}, 'Off means only a firm yes gets called. "Sit out" is always honoured either way.')),
+        el('span', { class: 'toggle__text' }, 'Also call people who did not sign up',
+          el('small', {}, 'Off means only people who signed up for the song can be called — the usual choice when the room signs up song by song.')),
       ),
       el('label', { class: 'toggle' },
         el('input', {

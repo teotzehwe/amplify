@@ -287,6 +287,74 @@ test('readiness reports the split and any instrument the song cannot staff', () 
   assert.equal(readiness.playable, false);
 });
 
+test('signing up for a chair puts you in it over someone with no preference', () => {
+  const asked = player('Asked', ['Guitar', 'Bass'], { picks: { s1: 'Bass' } });
+  const neutral = player('Neutral', ['Bass']);
+
+  const lineup = buildLineup({
+    players: [asked, neutral],
+    song: song(),
+    settings: settings({ slots: [{ instrument: 'Bass', count: 1 }] }),
+    roundIndex: 0,
+  });
+  assert.equal(lineup.slots[0].playerId, asked.id);
+});
+
+test('a requested chair wins even when an earlier slot could have claimed you', () => {
+  // Maya is the only person available for both chairs, and asked for Keys.
+  // Vocals comes first in the template, so a naive fill would take her there.
+  const maya = player('Maya', ['Vocals', 'Keys'], { picks: { s1: 'Keys' } });
+
+  const lineup = buildLineup({
+    players: [maya],
+    song: song(),
+    settings: settings({ slots: [{ instrument: 'Vocals', count: 1 }, { instrument: 'Keys', count: 1 }] }),
+    roundIndex: 0,
+  });
+  assert.deepEqual(seated(lineup, 'Keys'), [maya.id], 'she asked for keys');
+  assert.deepEqual(seated(lineup, 'Vocals'), [null], 'and is not spent on vocals instead');
+  assert.match(lineup.slots.find((s) => s.instrument === 'Keys').reason, /Signed up for Keys/);
+});
+
+test('asking for one chair does not get you seated in a different one first', () => {
+  // Both play guitar; Kit asked for drums, so the guitar seat should go to Lou.
+  const kit = player('Kit', ['Guitar', 'Drums'], { picks: { s1: 'Drums' } });
+  const lou = player('Lou', ['Guitar']);
+
+  const lineup = buildLineup({
+    players: [kit, lou],
+    song: song(),
+    settings: settings({ slots: [{ instrument: 'Guitar', count: 1 }, { instrument: 'Drums', count: 1 }] }),
+    roundIndex: 0,
+  });
+  assert.deepEqual(seated(lineup, 'Drums'), [kit.id]);
+  assert.deepEqual(seated(lineup, 'Guitar'), [lou.id]);
+});
+
+test('in sign-up-only mode, nobody who skipped the song is called', () => {
+  const signedUp = player('Signed', ['Guitar'], { stances: { s1: 'in' } });
+  // Never touched this song, so they fall back to the join default.
+  const silent = player('Silent', ['Guitar'], { unknownStance: 'maybe' });
+  const cfg = settings({ slots: [{ instrument: 'Guitar', count: 2 }], maybeCountsAsAvailable: false });
+
+  const lineup = buildLineup({ players: [signedUp, silent], song: song(), settings: cfg, roundIndex: 0 });
+  assert.deepEqual(seated(lineup, 'Guitar'), [signedUp.id, null]);
+});
+
+test('fairness still applies among people who signed up', () => {
+  const busy = player('Busy', ['Guitar'], { stances: { s1: 'in' } });
+  busy.stats = { plays: 3, lastRound: 0, streak: 0, byInstrument: {} };
+  const fresh = player('Fresh', ['Guitar'], { stances: { s1: 'in' } });
+
+  const lineup = buildLineup({
+    players: [busy, fresh],
+    song: song(),
+    settings: settings({ slots: [{ instrument: 'Guitar', count: 1 }], maybeCountsAsAvailable: false }),
+    roundIndex: 5,
+  });
+  assert.equal(lineup.slots[0].playerId, fresh.id, 'fewest turns still wins among sign-ups');
+});
+
 test('a song can override the band template', () => {
   const players = [player('D', ['Drums']), player('P', ['Percussion'])];
   const lineup = buildLineup({
