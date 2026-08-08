@@ -143,31 +143,13 @@ export function subscribe(onState) {
 
 /* ------------------------------------------------------------------ pieces */
 
-export const STANCE_LABEL = { in: "I'm in", maybe: 'Maybe', out: 'Sit out' };
-
-/** Three-way comfort switch. The whole point of the app, so it gets to be big. */
-export function stanceSwitch(value, onChange, labels = STANCE_LABEL) {
-  const box = el('div', { class: 'seg', role: 'group' });
-  for (const stance of ['in', 'maybe', 'out']) {
-    box.append(
-      el('button', {
-        type: 'button',
-        dataset: { stance },
-        'aria-pressed': String(value === stance),
-        onClick: () => onChange(stance),
-      }, labels[stance]),
-    );
-  }
-  return box;
-}
-
 export function logoMark() {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('fill', 'none');
   svg.setAttribute('aria-hidden', 'true');
   svg.innerHTML =
-    '<path d="M4 13v-2m4 6V7m4 13V4m4 13V7m4 6v-2" stroke="#22160c" stroke-width="2.4" stroke-linecap="round"/>';
+    '<path d="M4 13v-2m4 6V7m4 13V4m4 13V7m4 6v-2" stroke="#0b0909" stroke-width="2.4" stroke-linecap="round"/>';
   return el('div', { class: 'mark' }, svg);
 }
 

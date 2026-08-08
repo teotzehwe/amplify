@@ -1,5 +1,10 @@
 /* The call sheet at reading-across-a-room size. Shared by the host's
-   full-screen call-out and the stage display at /board. */
+   full-screen call-out and the stage display at /board.
+
+   This is the one surface that stays dark. The rest of the app is the brand's
+   warm paper, but a white screen projected into a dim venue is glare, so the
+   call sheet inverts to the brand's own near-black and cream (17:1) with coral
+   for the kicker. Same palette, opposite ground. */
 
 .callout {
   position: fixed;
@@ -9,29 +14,35 @@
   flex-direction: column;
   gap: clamp(14px, 2.4vh, 30px);
   padding: clamp(20px, 4vh, 54px) clamp(20px, 4vw, 64px);
-  background:
-    radial-gradient(1200px 640px at 50% -18%, rgba(255, 122, 69, 0.2), transparent 62%),
-    var(--bg);
+  background: var(--near-black);
+  color: var(--cream);
   overflow: auto;
 }
 .callout--inline { position: static; min-height: 100vh; }
 
 .callout__kicker {
-  font-size: clamp(0.7rem, 1.3vw, 0.95rem);
+  font-family: var(--font-display);
+  font-size: clamp(0.72rem, 1.3vw, 1rem);
   letter-spacing: 0.28em;
   text-transform: uppercase;
-  font-weight: 700;
-  color: var(--amber);
+  font-weight: 600;
+  color: var(--coral);
 }
 
 .callout__song {
-  font-size: clamp(2rem, 6.4vw, 5rem);
-  font-weight: 680;
-  letter-spacing: -0.035em;
+  font-family: var(--font-display);
+  font-size: clamp(2.1rem, 6.6vw, 5.2rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
   line-height: 1.02;
+  color: var(--cream);
 }
 
-.callout__meta { color: var(--muted); font-size: clamp(0.9rem, 1.8vw, 1.4rem); margin-top: 6px; }
+.callout__meta {
+  color: rgba(254, 238, 212, 0.66);
+  font-size: clamp(0.9rem, 1.8vw, 1.4rem);
+  margin-top: 6px;
+}
 
 .callout__grid {
   flex: 1;
@@ -54,39 +65,42 @@
   align-items: baseline;
   gap: clamp(12px, 2vw, 28px);
   padding: clamp(9px, 1.5vh, 18px) clamp(14px, 1.8vw, 24px);
-  border-radius: 16px;
-  background: linear-gradient(100deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015));
-  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(254, 238, 212, 0.06);
+  border: 1px solid rgba(254, 238, 212, 0.14);
 }
 .callout__row--empty { border-style: dashed; background: none; }
-.callout__row--resting { border-color: rgba(240, 192, 82, 0.4); }
+.callout__row--resting { border-color: rgba(226, 178, 121, 0.55); }
 
 .callout__inst {
   flex: none;
   min-width: clamp(90px, 12vw, 200px);
-  font-size: clamp(0.66rem, 1.15vw, 1rem);
+  font-family: var(--font-display);
+  font-size: clamp(0.7rem, 1.15vw, 1rem);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  font-weight: 700;
-  color: var(--faint);
+  font-weight: 600;
+  color: var(--honey);
 }
 
 .callout__name {
+  font-family: var(--font-display);
   font-size: clamp(1.5rem, 4.2vw, 3.4rem);
-  font-weight: 640;
-  letter-spacing: -0.03em;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   line-height: 1.08;
+  color: var(--cream);
 }
-.callout__name--empty { color: var(--faint); font-style: italic; font-weight: 500; }
+.callout__name--empty { color: rgba(254, 238, 212, 0.42); font-style: italic; font-weight: 400; }
 
 .callout__foot {
   display: flex;
   align-items: center;
   gap: 18px;
   flex-wrap: wrap;
-  color: var(--faint);
+  color: rgba(254, 238, 212, 0.55);
   font-size: clamp(0.75rem, 1.2vw, 1rem);
-  border-top: 1px solid var(--line);
+  border-top: 1px solid rgba(254, 238, 212, 0.16);
   padding-top: clamp(10px, 1.6vh, 18px);
 }
 
@@ -108,6 +122,8 @@
   min-height: 100vh;
   text-align: center;
   padding: 40px;
+  background: var(--near-black);
+  color: var(--cream);
 }
-.board-idle h2 { font-size: clamp(1.6rem, 4vw, 3rem); }
-.board-idle .waiting { color: var(--faint); font-size: clamp(0.9rem, 1.6vw, 1.2rem); }
+.board-idle h2 { font-family: var(--font-display); font-size: clamp(1.7rem, 4vw, 3.2rem); color: var(--cream); }
+.board-idle .waiting { color: rgba(254, 238, 212, 0.6); font-size: clamp(0.9rem, 1.6vw, 1.2rem); }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0a0b0f">
+  <meta name="theme-color" content="#fffdfa">
   <title>Amplify — Host console</title>
   <link rel="stylesheet" href="/app.css">
   <link rel="stylesheet" href="/board.css">
@@ -13,9 +13,9 @@
       display: flex;
       gap: 4px;
       padding: 4px;
-      background: var(--surface);
+      background: var(--surface-3);
       border: 1px solid var(--line);
-      border-radius: 14px;
+      border-radius: var(--radius);
       overflow-x: auto;
     }
     .tabs button {
@@ -30,13 +30,13 @@
       white-space: nowrap;
       transition: all 0.15s;
     }
-    .tabs button:hover { color: var(--text); background: var(--surface-2); }
-    .tabs button[aria-selected="true"] { background: var(--surface-3); color: var(--text); }
+    .tabs button:hover { color: var(--text); background: rgba(255, 255, 255, 0.7); }
+    .tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-soft); }
     .tabs .count { color: var(--faint); font-weight: 500; margin-left: 6px; }
 
     .stat-strip { display: flex; gap: 22px; flex-wrap: wrap; }
-    .stat b { display: block; font-size: 1.45rem; font-weight: 650; letter-spacing: -0.03em; }
-    .stat span { color: var(--faint); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
+    .stat b { display: block; font-family: var(--font-display); font-size: 1.7rem; font-weight: 600; }
+    .stat span { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
 
     /* --- call sheet ------------------------------------------------- */
     .slot {
@@ -48,9 +48,9 @@
       background: var(--surface);
       border: 1px solid var(--line);
     }
-    .slot--empty { border-style: dashed; border-color: rgba(255, 111, 134, 0.4); }
-    .slot--resting { border-color: rgba(240, 192, 82, 0.35); }
-    .slot--locked { border-color: rgba(167, 139, 250, 0.4); }
+    .slot--empty { border-style: dashed; border-color: rgba(191, 58, 16, 0.5); }
+    .slot--resting { border-color: rgba(125, 82, 32, 0.45); background: rgba(226, 178, 121, 0.14); }
+    .slot--locked { border-color: rgba(121, 72, 138, 0.45); background: rgba(172, 122, 183, 0.12); }
     @media (min-width: 720px) {
       .slot { grid-template-columns: 130px 1fr 230px; align-items: center; }
     }
@@ -61,9 +61,9 @@
       font-weight: 700;
       color: var(--faint);
     }
-    .slot__name { font-size: 1.22rem; font-weight: 640; letter-spacing: -0.02em; }
-    .slot__name--empty { color: var(--rose); font-weight: 550; font-size: 1.05rem; }
-    .slot__why { color: var(--faint); font-size: 0.8rem; margin-top: 2px; }
+    .slot__name { font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; }
+    .slot__name--empty { color: var(--ink-coral); font-weight: 600; font-size: 1.05rem; }
+    .slot__why { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
     .slot select { padding: 9px 11px; font-size: 0.88rem; }
 
     /* --- roster ----------------------------------------------------- */
@@ -79,21 +79,21 @@
     }
     .person--away { opacity: 0.55; }
     .person__top { display: flex; align-items: center; gap: 10px; }
-    .person__name { font-weight: 640; }
+    .person__name { font-family: var(--font-display); font-size: 1.08rem; font-weight: 600; }
     .turns {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       padding: 3px 10px;
       border-radius: 999px;
-      background: rgba(255, 180, 84, 0.13);
-      border: 1px solid rgba(255, 180, 84, 0.3);
-      color: #ffd9a1;
+      background: var(--coral);
+      border: 1px solid var(--coral);
+      color: var(--near-black);
       font-size: 0.76rem;
       font-weight: 700;
     }
-    .queue-bar { height: 4px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
-    .queue-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--amber), var(--ember)); }
+    .queue-bar { height: 5px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+    .queue-bar i { display: block; height: 100%; background: var(--coral); }
 
     /* --- song list -------------------------------------------------- */
     .song-card {
@@ -105,11 +105,11 @@
       border: 1px solid var(--line);
       transition: border-color 0.15s;
     }
-    .song-card:hover { border-color: var(--line-strong); }
+    .song-card:hover { border-color: var(--near-black); }
     @media (min-width: 700px) {
       .song-card { grid-template-columns: 1fr auto; align-items: center; }
     }
-    .song-card__title { font-weight: 640; font-size: 1.02rem; }
+    .song-card__title { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; }
     .readiness { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
 
     .gate { max-width: 420px; margin: 14vh auto 0; }
