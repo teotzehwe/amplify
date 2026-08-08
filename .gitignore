@@ -2,6 +2,7 @@
 data/
 *.tmp
 
+.vercel/
 node_modules/
 npm-debug.log*
 .DS_Store

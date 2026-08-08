@@ -123,10 +123,45 @@ Turn counts are what drive fairness, so log songs as they happen.
   many as they like from their phone, and suggestions show who added them.
 - **Reset turn counts** for a second set, or **clear the night** entirely.
 
+## Going live on Vercel
+
+Amplify runs two ways from the same code.
+
+**On a laptop** it is a long-lived server: state in `data/jam.json`, live
+updates pushed over an event stream. Nothing to configure.
+
+**On Vercel** there is no disk and every request may hit a fresh instance, so
+it needs somewhere shared to keep the night:
+
+1. In your Vercel project, add a Redis store (Storage → Marketplace → Upstash
+   works). Vercel sets `KV_REST_API_URL` and `KV_REST_API_TOKEN` for you;
+   `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are accepted too.
+2. Deploy. `vercel.json` is already here — no build step, no dependencies.
+3. Open `/host` once and note the host key from `/api/state`, or run the server
+   locally against the same store to have it printed.
+
+Amplify picks its backend from the environment: a key-value store when one is
+configured, the local file otherwise. Deploy without one and the API answers
+503 with an explanation rather than quietly giving each instance its own jam.
+
+Two differences worth knowing when it is hosted:
+
+- **Updates arrive by polling** every couple of seconds, because a serverless
+  function cannot hold an event stream open. The server tells the page which
+  to use, so this needs no configuration.
+- **Writes are compare-and-set.** If two people sign up in the same instant,
+  the second write is refused and replayed against the newer state rather than
+  overwriting it. A whole room tapping at once is fine; the round trip is a
+  few milliseconds longer.
+
+A hosted deploy is on the public internet, so anyone with the link can sign up
+and suggest songs. The host key still gates everything under `/api/host/*`.
+
 ## Data and privacy
 
-Everything lives in `data/jam.json` next to the server — no database, no
-accounts, no third parties. Delete the file and the night is gone.
+On a laptop everything lives in `data/jam.json` next to the server — no
+database, no accounts, no third parties. Delete the file and the night is gone.
+Hosted, the same JSON lives in your key-value store under `amplify:state`.
 
 That file holds the host key and each player's session token, so it is
 gitignored; do not commit or share it. The public API never returns either: the
@@ -142,6 +177,9 @@ Useful environment variables:
 | --- | --- | --- |
 | `PORT` | `3000` | Port to listen on |
 | `DATA_DIR` | `./data` | Where `jam.json` is written |
+| `KV_REST_API_URL` | — | Redis REST endpoint. Set it and the file store is not used |
+| `KV_REST_API_TOKEN` | — | Token for that endpoint |
+| `KV_PREFIX` | `amplify` | Key prefix, so two jams can share one store |
 
 ## Tests
 
@@ -151,14 +189,19 @@ npm test
 
 Covers the rotation engine directly — consent, rest gaps, scarcity, the repair
 pass, personal caps, and turn spread across a simulated night — plus API-level
-tests that boot the real server and check auth, validation and a full round trip.
+tests that boot the real server and check auth, validation and a full round
+trip. The key-value backend is tested against a stand-in that speaks the same
+REST protocol, including eight people signing up in the same instant, so the
+hosted path is exercised without needing an account.
 
 ## Layout
 
 ```
-server.js            HTTP, REST API, live updates (server-sent events)
-public/js/qr.js      QR encoder, so the sign-up code works with the wifi down
+server.js            local listener — `node server.js`
+api/[...path].js     the same app as a serverless function
+src/app.js           routing, validation, the REST API
 src/scheduler.js     the rotation engine — pure functions, no I/O
-src/store.js         JSON persistence and public-state redaction
+src/store.js         file and key-value backends, per-request isolation
+public/js/qr.js      QR encoder, so the sign-up code works with the wifi down
 public/              the three screens; no build step, no framework
 ```

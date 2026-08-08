@@ -93,8 +93,11 @@ export function guard(fn) {
 /* ------------------------------------------------------------- live state */
 
 /**
- * Fetch state now, then again whenever the server says something changed.
- * Falls back to polling if the event stream drops (flaky venue wifi).
+ * Fetch state now, then again whenever it changes.
+ *
+ * A long-lived server pushes an event stream and this only polls as a
+ * backstop for flaky venue wifi. A serverless host cannot hold a stream open,
+ * so there it polls briskly instead. The server says which it is.
  */
 export function subscribe(onState) {
   let last = -1;
@@ -113,6 +116,7 @@ export function subscribe(onState) {
     busy = true;
     try {
       const state = await api('/state');
+      connect(state.realtime);
       if (force || state.version !== last) {
         last = state.version;
         onState(state);
@@ -128,14 +132,25 @@ export function subscribe(onState) {
     }
   }
 
-  pull();
-  const events = new EventSource('/api/events');
-  events.onmessage = () => pull();
-  events.onerror = () => {}; // EventSource retries on its own
+  let events = null;
+  let poll = null;
 
-  const poll = setInterval(pull, 10000);
+  /** Wire up live updates once the server has told us what it supports. */
+  function connect(mode) {
+    if (poll) return; // already connected
+    if (mode === 'sse') {
+      events = new EventSource('/api/events');
+      events.onmessage = () => pull();
+      events.onerror = () => {}; // EventSource retries on its own
+      poll = setInterval(pull, 10000); // backstop if the stream dies quietly
+    } else {
+      poll = setInterval(pull, 2500);
+    }
+  }
+
+  pull();
   window.addEventListener('beforeunload', () => {
-    events.close();
+    events?.close();
     clearInterval(poll);
   });
   return pull;
