@@ -1,0 +1,113 @@
+/* The call sheet at reading-across-a-room size. Shared by the host's
+   full-screen call-out and the stage display at /board. */
+
+.callout {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 2.4vh, 30px);
+  padding: clamp(20px, 4vh, 54px) clamp(20px, 4vw, 64px);
+  background:
+    radial-gradient(1200px 640px at 50% -18%, rgba(255, 122, 69, 0.2), transparent 62%),
+    var(--bg);
+  overflow: auto;
+}
+.callout--inline { position: static; min-height: 100vh; }
+
+.callout__kicker {
+  font-size: clamp(0.7rem, 1.3vw, 0.95rem);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--amber);
+}
+
+.callout__song {
+  font-size: clamp(2rem, 6.4vw, 5rem);
+  font-weight: 680;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+}
+
+.callout__meta { color: var(--muted); font-size: clamp(0.9rem, 1.8vw, 1.4rem); margin-top: 6px; }
+
+.callout__grid {
+  flex: 1;
+  display: grid;
+  gap: clamp(8px, 1.4vh, 16px);
+  grid-template-columns: 1fr;
+  align-content: center;
+}
+@media (min-width: 900px) {
+  .callout__grid--split { grid-template-columns: 1fr 1fr; column-gap: clamp(20px, 3vw, 48px); }
+
+  /* Two columns halves the room per name, so scale type down to keep most
+     full names on a single line. */
+  .callout__grid--split .callout__inst { min-width: clamp(76px, 7vw, 130px); }
+  .callout__grid--split .callout__name { font-size: clamp(1.4rem, 2.9vw, 2.7rem); }
+}
+
+.callout__row {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(12px, 2vw, 28px);
+  padding: clamp(9px, 1.5vh, 18px) clamp(14px, 1.8vw, 24px);
+  border-radius: 16px;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015));
+  border: 1px solid var(--line);
+}
+.callout__row--empty { border-style: dashed; background: none; }
+.callout__row--resting { border-color: rgba(240, 192, 82, 0.4); }
+
+.callout__inst {
+  flex: none;
+  min-width: clamp(90px, 12vw, 200px);
+  font-size: clamp(0.66rem, 1.15vw, 1rem);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.callout__name {
+  font-size: clamp(1.5rem, 4.2vw, 3.4rem);
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+}
+.callout__name--empty { color: var(--faint); font-style: italic; font-weight: 500; }
+
+.callout__foot {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  color: var(--faint);
+  font-size: clamp(0.75rem, 1.2vw, 1rem);
+  border-top: 1px solid var(--line);
+  padding-top: clamp(10px, 1.6vh, 18px);
+}
+
+.callout__close {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 101;
+}
+
+/* Keep the song title clear of the floating Played/Close controls. */
+.callout--overlay .callout__head { padding-right: 230px; }
+
+.board-idle {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  min-height: 100vh;
+  text-align: center;
+  padding: 40px;
+}
+.board-idle h2 { font-size: clamp(1.6rem, 4vw, 3rem); }
+.board-idle .waiting { color: var(--faint); font-size: clamp(0.9rem, 1.6vw, 1.2rem); }

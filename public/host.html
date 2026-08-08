@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0b0f">
+  <title>Amplify — Host console</title>
+  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/board.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='19' font-size='19'>🎛️</text></svg>">
+  <style>
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow-x: auto;
+    }
+    .tabs button {
+      padding: 9px 16px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .tabs button:hover { color: var(--text); background: var(--surface-2); }
+    .tabs button[aria-selected="true"] { background: var(--surface-3); color: var(--text); }
+    .tabs .count { color: var(--faint); font-weight: 500; margin-left: 6px; }
+
+    .stat-strip { display: flex; gap: 22px; flex-wrap: wrap; }
+    .stat b { display: block; font-size: 1.45rem; font-weight: 650; letter-spacing: -0.03em; }
+    .stat span { color: var(--faint); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
+
+    /* --- call sheet ------------------------------------------------- */
+    .slot {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      padding: 14px;
+      border-radius: var(--radius);
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+    .slot--empty { border-style: dashed; border-color: rgba(255, 111, 134, 0.4); }
+    .slot--resting { border-color: rgba(240, 192, 82, 0.35); }
+    .slot--locked { border-color: rgba(167, 139, 250, 0.4); }
+    @media (min-width: 720px) {
+      .slot { grid-template-columns: 130px 1fr 230px; align-items: center; }
+    }
+    .slot__inst {
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--faint);
+    }
+    .slot__name { font-size: 1.22rem; font-weight: 640; letter-spacing: -0.02em; }
+    .slot__name--empty { color: var(--rose); font-weight: 550; font-size: 1.05rem; }
+    .slot__why { color: var(--faint); font-size: 0.8rem; margin-top: 2px; }
+    .slot select { padding: 9px 11px; font-size: 0.88rem; }
+
+    /* --- roster ----------------------------------------------------- */
+    .roster { display: grid; gap: 10px; }
+    @media (min-width: 780px) { .roster { grid-template-columns: 1fr 1fr; } }
+    .person {
+      display: grid;
+      gap: 8px;
+      padding: 14px 16px;
+      border-radius: var(--radius);
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+    .person--away { opacity: 0.55; }
+    .person__top { display: flex; align-items: center; gap: 10px; }
+    .person__name { font-weight: 640; }
+    .turns {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(255, 180, 84, 0.13);
+      border: 1px solid rgba(255, 180, 84, 0.3);
+      color: #ffd9a1;
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+    .queue-bar { height: 4px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+    .queue-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--amber), var(--ember)); }
+
+    /* --- song list -------------------------------------------------- */
+    .song-card {
+      display: grid;
+      gap: 12px;
+      padding: 15px 16px;
+      border-radius: var(--radius);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      transition: border-color 0.15s;
+    }
+    .song-card:hover { border-color: var(--line-strong); }
+    @media (min-width: 700px) {
+      .song-card { grid-template-columns: 1fr auto; align-items: center; }
+    }
+    .song-card__title { font-weight: 640; font-size: 1.02rem; }
+    .readiness { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+
+    .gate { max-width: 420px; margin: 14vh auto 0; }
+  </style>
+</head>
+<body>
+  <main class="shell shell--wide" id="app"></main>
+  <div id="overlay"></div>
+  <script type="module" src="/js/host.js"></script>
+</body>
+</html>

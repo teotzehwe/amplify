@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0b0f">
+  <title>Amplify — Jam sign-up</title>
+  <link rel="stylesheet" href="/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='19' font-size='19'>🎸</text></svg>">
+  <style>
+    .instrument-line {
+      display: grid;
+      gap: 8px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .instrument-line:last-child { border-bottom: 0; }
+    @media (min-width: 520px) {
+      .instrument-line { grid-template-columns: 1fr 260px; align-items: center; }
+    }
+
+    .you-card {
+      background: linear-gradient(150deg, rgba(255, 180, 84, 0.16), rgba(255, 122, 69, 0.05) 55%, transparent),
+        var(--surface);
+      border: 1px solid rgba(255, 180, 84, 0.28);
+    }
+    .you-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
+    .you-stat b { display: block; font-size: 1.7rem; font-weight: 650; letter-spacing: -0.03em; }
+    .you-stat span { color: var(--faint); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.07em; }
+
+    .onstage {
+      border: 1px solid rgba(69, 207, 156, 0.4);
+      background: linear-gradient(150deg, rgba(69, 207, 156, 0.18), transparent 70%), var(--surface);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      animation: pulse-in 0.4s ease-out;
+    }
+    .onstage .kicker { color: #8ee7c4; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; }
+    .onstage .what { font-size: 1.6rem; font-weight: 650; letter-spacing: -0.02em; margin-top: 4px; }
+    @keyframes pulse-in { from { transform: scale(0.98); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    details.card > summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+    }
+    details.card > summary::-webkit-details-marker { display: none; }
+    details.card > summary::after { content: "▾"; margin-left: auto; color: var(--faint); transition: transform 0.2s; }
+    details.card[open] > summary::after { transform: rotate(180deg); }
+    details.card > summary + * { margin-top: 16px; }
+
+    .step-num {
+      display: inline-grid;
+      place-items: center;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: rgba(255, 180, 84, 0.16);
+      color: var(--amber);
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex: none;
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" id="app"></main>
+  <script type="module" src="/js/player.js"></script>
+</body>
+</html>
