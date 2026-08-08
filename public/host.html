@@ -110,6 +110,15 @@
       .song-card { grid-template-columns: 1fr auto; align-items: center; }
     }
     .song-card__title { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; }
+    .song-card--next { border-color: rgba(121, 72, 138, 0.5); background: rgba(172, 122, 183, 0.09); }
+    .song-card--played { opacity: 0.6; }
+    .song-card--deck { border-color: var(--coral); background: rgba(251, 86, 36, 0.07); opacity: 1; }
+    @media (min-width: 700px) {
+      .song-card { grid-template-columns: auto 1fr auto; }
+    }
+    .queue-move { display: flex; flex-direction: row; gap: 4px; }
+    @media (min-width: 700px) { .queue-move { flex-direction: column; } }
+    .queue-move .btn { font-size: 0.7rem; line-height: 1; }
     .readiness { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
 
     .share { display: grid; gap: 18px; }

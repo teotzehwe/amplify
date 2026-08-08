@@ -1,7 +1,7 @@
 /* The host console: pick a song, get a fair lineup, call it out. */
 
 import {
-  $, api, el, guard, masthead, pluralize, render, subscribe, toast, tokens,
+  $, api, el, guard, masthead, playedSongIds, pluralize, render, subscribe, toast, tokens, upNext,
 } from './common.js';
 import { qrSvg } from './qr.js';
 
@@ -428,23 +428,56 @@ function songsTab() {
 
     el('section', { class: 'card stack' },
       el('div', { class: 'card__head' },
-        el('h2', {}, 'Setlist'),
-        el('span', { class: 'hint' }, `${pluralize(state.songs.length, 'song')}`),
+        el('h2', {}, 'The queue'),
+        el('span', { class: 'hint' },
+          `${pluralize(state.songs.length, 'song')} · the top one not yet played is up next`),
       ),
       state.songs.length
-        ? el('div', { class: 'stack', style: { gap: '10px' } }, state.songs.map(songAdminCard))
+        ? el('div', { class: 'stack', style: { gap: '10px' } },
+            state.songs.map((song, i) => songAdminCard(song, i)))
         : el('div', { class: 'empty' }, 'Nothing here yet. Add the songs you expect to call tonight.'),
     ),
   );
 }
 
-function songAdminCard(song) {
+/** Rewrite the whole queue order from a moved song. */
+const reorder = (songId, toIndex) => guard(() => {
+  const ids = state.songs.map((s) => s.id).filter((id) => id !== songId);
+  ids.splice(Math.max(0, Math.min(ids.length, toIndex)), 0, songId);
+  return api('/host/songs/order', { method: 'POST', body: { order: ids } });
+})();
+
+function songAdminCard(song, index) {
   const r = state.readiness[song.id] || { in: 0, maybe: 0, out: 0, gaps: [] };
   const suggester = song.suggestedBy ? playerById(song.suggestedBy) : null;
+  const played = playedSongIds(state).has(song.id);
+  const onDeck = state.current?.songId === song.id;
+  const isNext = upNext(state)?.id === song.id;
 
-  return el('div', { class: 'song-card' },
+  return el('div', {
+    class: `song-card${isNext ? ' song-card--next' : ''}${onDeck ? ' song-card--deck' : ''}${played && !onDeck ? ' song-card--played' : ''}`,
+  },
+    el('div', { class: 'queue-move' },
+      el('button', {
+        class: 'btn btn--icon btn--ghost',
+        title: 'Move up',
+        disabled: index === 0,
+        onClick: () => reorder(song.id, index - 1),
+      }, '▲'),
+      el('button', {
+        class: 'btn btn--icon btn--ghost',
+        title: 'Move down',
+        disabled: index === state.songs.length - 1,
+        onClick: () => reorder(song.id, index + 1),
+      }, '▼'),
+    ),
     el('div', {},
-      el('div', { class: 'song-card__title' }, song.title),
+      el('div', { class: 'row', style: { gap: '8px' } },
+        el('div', { class: 'song-card__title' }, song.title),
+        onDeck ? el('span', { class: 'tag tag--out' }, 'on deck') : null,
+        isNext ? el('span', { class: 'tag tag--lead' }, 'up next') : null,
+        played ? el('span', { class: 'tag' }, 'played') : null,
+      ),
       el('div', { class: 'muted small' },
         [song.artist, song.key && `key of ${song.key}`, suggester && `suggested by ${suggester.name}`]
           .filter(Boolean).join(' · ') || '—'),
@@ -457,7 +490,14 @@ function songAdminCard(song) {
           : el('span', { class: 'tag tag--in' }, 'Full band available'),
       ),
     ),
-    el('div', { class: 'row' },
+    el('div', { class: 'row row--wrap' },
+      index > 0
+        ? el('button', {
+            class: 'btn btn--sm btn--ghost',
+            title: 'Jump to the front of the queue',
+            onClick: () => reorder(song.id, 0),
+          }, 'Play next')
+        : null,
       el('button', { class: 'btn btn--sm', onClick: () => drawLineup(song.id) }, 'Draw'),
       el('button', {
         class: 'btn btn--sm btn--quiet',

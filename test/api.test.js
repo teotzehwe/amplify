@@ -284,6 +284,47 @@ test('removing a song clears the sign-ups that pointed at it', async () => {
   assert.deepEqual(player.picks, {}, 'no orphaned chair request');
 });
 
+test('the host can rearrange the queue', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const ids = [];
+  for (const title of ['One', 'Two', 'Three']) {
+    ids.push((await call('/songs', { method: 'POST', body: { title }, host: true })).data.id);
+  }
+
+  const res = await call('/host/songs/order', {
+    method: 'POST', body: { order: [ids[2], ids[0], ids[1]] }, host: true,
+  });
+  assert.equal(res.status, 200);
+
+  const { data } = await call('/state');
+  assert.deepEqual(data.songs.map((s) => s.title), ['Three', 'One', 'Two']);
+});
+
+test('reordering never loses a song a stale tab did not know about', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const a = (await call('/songs', { method: 'POST', body: { title: 'A' }, host: true })).data.id;
+  const b = (await call('/songs', { method: 'POST', body: { title: 'B' }, host: true })).data.id;
+  await call('/songs', { method: 'POST', body: { title: 'Added meanwhile' }, host: true });
+
+  // The client only knew about A and B when it sent the order.
+  await call('/host/songs/order', { method: 'POST', body: { order: [b, a] }, host: true });
+
+  const { data } = await call('/state');
+  assert.deepEqual(data.songs.map((s) => s.title), ['B', 'A', 'Added meanwhile']);
+});
+
+test('reordering ignores unknown ids and requires the host key', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const id = (await call('/songs', { method: 'POST', body: { title: 'Only' }, host: true })).data.id;
+
+  assert.equal((await call('/host/songs/order', { method: 'POST', body: { order: [id] } })).status, 403);
+  assert.equal((await call('/host/songs/order', { method: 'POST', body: { order: 'nope' }, host: true })).status, 400);
+
+  await call('/host/songs/order', { method: 'POST', body: { order: ['ghost', id], host: true }, host: true });
+  const { data } = await call('/state');
+  assert.equal(data.songs.length, 1);
+});
+
 test('unknown endpoints and methods are refused cleanly', async () => {
   assert.equal((await call('/nope')).status, 404);
   assert.equal((await call('/state', { method: 'DELETE' })).status, 404);

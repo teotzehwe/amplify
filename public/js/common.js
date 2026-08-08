@@ -143,6 +143,19 @@ export function subscribe(onState) {
 
 /* ------------------------------------------------------------------ pieces */
 
+/** Songs already played tonight. A song can be called twice, so this is a set. */
+export const playedSongIds = (state) => new Set(state.rounds.map((r) => r.songId).filter(Boolean));
+
+/**
+ * The next song in the queue: the first one not yet played and not already on
+ * deck. Queue order is simply the order of `state.songs`, which the host can
+ * rearrange.
+ */
+export function upNext(state) {
+  const played = playedSongIds(state);
+  return state.songs.find((s) => !played.has(s.id) && s.id !== state.current?.songId) || null;
+}
+
 export function logoMark() {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');

@@ -114,31 +114,83 @@
 /* Keep the song title clear of the floating Played/Close controls. */
 .callout--overlay .callout__head { padding-right: 230px; }
 
-.board-idle {
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 16px;
+/* ------------------------------------------------------- the stage display */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 3vh, 36px);
   min-height: 100vh;
-  text-align: center;
-  padding: 40px;
+  padding: clamp(20px, 4vh, 48px) clamp(20px, 4vw, 56px);
   background: var(--near-black);
   color: var(--cream);
 }
-.board-idle h2 { font-family: var(--font-display); font-size: clamp(1.7rem, 4vw, 3.2rem); color: var(--cream); }
-.board-idle .waiting { color: rgba(254, 238, 212, 0.6); font-size: clamp(0.9rem, 1.6vw, 1.2rem); }
 
-/* The code keeps its white quiet zone — scanners need the contrast. */
-.board-idle__qr {
-  padding: clamp(10px, 1.4vw, 18px);
+.board__head {
+  display: grid;
+  gap: clamp(20px, 3.5vw, 52px);
+  align-items: center;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  text-align: center;
+}
+@media (min-width: 780px) {
+  .board__head { grid-template-columns: auto 1fr; justify-items: start; text-align: left; }
+}
+
+.board__qr { display: grid; gap: 8px; justify-items: center; }
+.board__qr > svg {
+  display: block;
+  width: clamp(150px, 15vw, 240px);
+  height: auto;
+  padding: clamp(8px, 1vw, 14px);
   background: #fff;
   border-radius: 12px;
-  line-height: 0;
 }
-.board-idle__qr svg { display: block; width: clamp(180px, 22vw, 300px); height: auto; }
+.board__url { color: var(--honey); font-size: clamp(0.7rem, 1vw, 0.95rem); }
 
-.board-idle__url {
-  color: var(--honey);
-  font-size: clamp(0.85rem, 1.5vw, 1.15rem);
-  letter-spacing: 0.02em;
+.board__titles { display: grid; gap: clamp(12px, 2.2vh, 26px); min-width: 0; }
+
+.board__kicker {
+  font-family: var(--font-display);
+  font-size: clamp(0.72rem, 1.2vw, 1rem);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--coral);
 }
+.board__kicker--next { color: var(--honey); }
+
+.board__now {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5.6vw, 4.6rem);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: 0.01em;
+  color: var(--cream);
+}
+
+.board__next {
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 2.6vw, 2.1rem);
+  font-weight: 600;
+  line-height: 1.1;
+  color: rgba(254, 238, 212, 0.82);
+}
+
+.board__meta { color: rgba(254, 238, 212, 0.6); font-size: clamp(0.85rem, 1.5vw, 1.25rem); margin-top: 4px; }
+.board__meta--small { font-size: clamp(0.75rem, 1.1vw, 1rem); }
+
+.board .callout__grid { flex: 1; }
+
+.board__idle {
+  flex: 1;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  color: rgba(254, 238, 212, 0.62);
+  font-size: clamp(1rem, 2vw, 1.6rem);
+}
+.board__waiting { color: rgba(254, 238, 212, 0.45); font-size: clamp(0.85rem, 1.4vw, 1.15rem); }

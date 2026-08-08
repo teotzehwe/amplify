@@ -330,6 +330,32 @@ route('DELETE', /^\/api\/songs\/([\w-]+)$/, (ctx) => {
   return { ok: true };
 });
 
+/**
+ * Reorder the queue. Takes the full list of song ids; anything the client
+ * left out keeps its relative place at the end, so a stale tab cannot drop
+ * a song that somebody added a moment ago.
+ */
+route('POST', /^\/api\/host\/songs\/order$/, (ctx) => {
+  requireHost(ctx);
+  if (!Array.isArray(ctx.body.order)) throw bad('order must be a list of song ids');
+
+  const wanted = ctx.body.order.slice(0, 500).map((id) => str(id, { max: 40 }));
+  store.update((state) => {
+    const seen = new Set();
+    const ordered = [];
+    for (const id of wanted) {
+      const song = state.songs.find((s) => s.id === id);
+      if (song && !seen.has(id)) {
+        seen.add(id);
+        ordered.push(song);
+      }
+    }
+    for (const song of state.songs) if (!seen.has(song.id)) ordered.push(song);
+    state.songs = ordered;
+  });
+  return { ok: true };
+});
+
 route('POST', /^\/api\/host\/auth$/, (ctx) => {
   if (!store.isHost(ctx.body.token)) throw new HttpError(403, 'That key does not match');
   return { ok: true, jam: store.state.jam.name };

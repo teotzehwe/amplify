@@ -32,7 +32,7 @@ console.
 | --- | --- | --- |
 | `/` | Musicians, on their phones | Sign in, sign up for songs, set limits, see when you are up |
 | `/host` | Whoever is running the night | Draw lineups, swap chairs, call the song, log it |
-| `/board` | A TV or spare laptop | The current lineup in room-sized type, and the sign-up code between songs |
+| `/board` | A TV or spare laptop | Sign-up code, **Now** and **Next**, and the lineup in room-sized type |
 
 Everything updates live. A song added on the host console appears on every
 phone immediately; a musician marking themselves on a break drops out of the
@@ -99,7 +99,10 @@ Every pick shows its reasoning, so the host can always answer "why them?".
 ## Running a song
 
 1. **Now** → pick a song. Each one shows who is in, who is out, and whether the
-   band can actually be staffed before you call it.
+   band can actually be staffed before you call it. The **Songs** tab is the
+   queue: reorder it with the arrows, or hit **Play next** to jump a song to
+   the front. The top song not yet played is marked *up next*, and that is what
+   the stage display shows as **Next**.
 2. **Draw lineup.** Swap anyone from the dropdown beside their chair, or leave a
    chair open. Manual picks survive a redraw; *Clear my picks* starts over.
 3. **Call it out** — full-screen names, readable from across the room.
