@@ -3,6 +3,7 @@
 import {
   $, api, el, guard, masthead, pluralize, render, subscribe, toast, tokens,
 } from './common.js';
+import { qrSvg } from './qr.js';
 
 const app = $('#app');
 const overlayRoot = $('#overlay');
@@ -486,15 +487,27 @@ function settingsTab() {
   };
 
   return el('div', { class: 'stack' },
-    el('section', { class: 'card stack' },
-      el('div', { class: 'card__head' }, el('h2', {}, 'Share the sign-up')),
-      el('div', { class: 'row row--wrap' },
-        el('input', { type: 'text', readOnly: true, class: 'mono grow', value: signupUrl,
-          onFocus: (e) => e.target.select() }),
-        el('button', { class: 'btn', onClick: copy(signupUrl) }, 'Copy link'),
+    el('section', { class: 'card' },
+      el('div', { class: 'card__head' },
+        el('h2', {}, 'Share the sign-up'),
+        el('span', { class: 'hint' }, 'Point a phone camera at the code'),
       ),
-      el('p', { class: 'section-note' },
-        'Anyone on the same wifi can open this. Put it on a card by the stage.'),
+      el('div', { class: 'share' },
+        el('div', { class: 'share__qr' }, qrSvg(signupUrl, { size: 190 })),
+        el('div', { class: 'stack grow' },
+          el('div', { class: 'row row--wrap' },
+            el('input', { type: 'text', readOnly: true, class: 'mono grow', value: signupUrl,
+              onFocus: (e) => e.target.select() }),
+            el('button', { class: 'btn', onClick: copy(signupUrl) }, 'Copy link'),
+          ),
+          el('p', { class: 'section-note' },
+            'Anyone on the same wifi can scan this or type the link. The stage display shows the same code between songs.'),
+          el('button', {
+            class: 'btn btn--ghost btn--sm',
+            onClick: () => window.print(),
+          }, 'Print a card for the stage'),
+        ),
+      ),
     ),
 
     el('section', { class: 'card stack stack--lg' },

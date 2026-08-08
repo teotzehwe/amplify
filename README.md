@@ -21,8 +21,10 @@ No install step, no dependencies, no internet. Node 18 or newer.
    Stage display     http://192.168.1.24:3000/board
 ```
 
-Share the sign-up link (a card by the stage works well). Keep the host link to
-yourself — it carries the key that unlocks the console.
+Share the sign-up link. The host console's Settings tab shows it as a QR code
+you can print for the stage, and the stage display shows the same code between
+songs. Keep the host link to yourself — it carries the key that unlocks the
+console.
 
 ## Three screens
 
@@ -30,7 +32,7 @@ yourself — it carries the key that unlocks the console.
 | --- | --- | --- |
 | `/` | Musicians, on their phones | Sign in, sign up for songs, set limits, see when you are up |
 | `/host` | Whoever is running the night | Draw lineups, swap chairs, call the song, log it |
-| `/board` | A TV or spare laptop | The current lineup in room-sized type |
+| `/board` | A TV or spare laptop | The current lineup in room-sized type, and the sign-up code between songs |
 
 Everything updates live. A song added on the host console appears on every
 phone immediately; a musician marking themselves on a break drops out of the
@@ -152,6 +154,7 @@ tests that boot the real server and check auth, validation and a full round trip
 
 ```
 server.js            HTTP, REST API, live updates (server-sent events)
+public/js/qr.js      QR encoder, so the sign-up code works with the wifi down
 src/scheduler.js     the rotation engine — pure functions, no I/O
 src/store.js         JSON persistence and public-state redaction
 public/              the three screens; no build step, no framework

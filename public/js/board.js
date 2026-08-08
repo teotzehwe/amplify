@@ -1,6 +1,7 @@
 /* Read-only stage display. Point a TV or a spare laptop at /board. */
 
 import { $, el, logoMark, pluralize, render, subscribe } from './common.js';
+import { qrSvg } from './qr.js';
 
 const app = $('#app');
 
@@ -41,17 +42,23 @@ function callSheet(state) {
   );
 }
 
-/** Between songs the board turns into a sign-up prompt. */
+/**
+ * Between songs the board becomes the sign-up card: a code big enough to scan
+ * from a table, plus the URL for anyone whose camera will not play along.
+ */
 function idle(state) {
   const waiting = state.players.filter((p) => p.present && p.stats.plays === 0);
+  const signupUrl = `${location.origin}/`;
 
   return el('div', { class: 'board-idle' },
     logoMark(),
     el('h2', {}, state.jam.name),
+    el('div', { class: 'board-idle__qr' }, qrSvg(signupUrl, { size: 260 })),
+    el('p', { class: 'board-idle__url mono' }, signupUrl),
     el('p', { class: 'waiting' },
       state.players.length
         ? `${pluralize(state.roundIndex, 'song')} played · ${pluralize(state.players.filter((p) => p.present).length, 'musician')} signed in`
-        : 'Scan the sign-up card to get in the rotation'),
+        : 'Scan to get in the rotation'),
     waiting.length
       ? el('p', { class: 'waiting' },
           `Up soon: ${waiting.slice(0, 6).map((p) => p.name).join(' · ')}`)

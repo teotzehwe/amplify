@@ -112,6 +112,25 @@
     .song-card__title { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; }
     .readiness { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
 
+    .share { display: grid; gap: 18px; }
+    @media (min-width: 620px) { .share { grid-template-columns: auto 1fr; align-items: start; } }
+    .share__qr {
+      padding: 10px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      line-height: 0;
+    }
+    .share__qr svg { display: block; }
+
+    /* Printing the settings page gives you a sign-up card for the stage. */
+    @media print {
+      body { background: #fff; }
+      .tabs, .masthead .btn, .btn { display: none !important; }
+      .card { border: 0; box-shadow: none; }
+      .share__qr { border: 0; }
+    }
+
     .gate { max-width: 420px; margin: 14vh auto 0; }
   </style>
 </head>
