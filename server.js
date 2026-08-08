@@ -128,10 +128,7 @@ function parsePicks(input) {
 }
 
 function parseLimits(input = {}) {
-  return {
-    maxSongs: intOrNull(input.maxSongs, { min: 1, max: 50 }),
-    noLeadVocals: Boolean(input.noLeadVocals),
-  };
+  return { maxSongs: intOrNull(input.maxSongs, { min: 1, max: 50 }) };
 }
 
 function parseSlots(input, fallback) {

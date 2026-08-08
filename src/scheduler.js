@@ -56,9 +56,6 @@ function hardBlock(player, instrument, song, settings) {
   const cap = player.limits?.maxSongs;
   if (cap != null && player.stats.plays >= cap) return `at their limit of ${cap} songs`;
 
-  if (song && player.limits?.noLeadVocals && normalizeInstrument(instrument) === 'vocals') {
-    return 'not taking lead vocals tonight';
-  }
   return null;
 }
 

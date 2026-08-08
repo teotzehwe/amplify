@@ -263,33 +263,6 @@ textarea { resize: vertical; min-height: 76px; }
 .dot--maybe { background: var(--honey); }
 .dot--out { background: var(--coral); }
 
-/* -------------------------------------------------------- segmented switch */
-
-.seg {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: 4px;
-  padding: 4px;
-  background: var(--surface-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-
-.seg button {
-  padding: 9px 6px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.seg button:hover { color: var(--text); background: rgba(255, 255, 255, 0.7); }
-.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-soft); }
-
 /* -------------------------------------------------------------- song rows */
 
 .song-row {

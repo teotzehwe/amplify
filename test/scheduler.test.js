@@ -184,18 +184,6 @@ test('a personal song cap is a hard stop', () => {
   assert.equal(lineup.slots[0].playerId, null);
 });
 
-test('"no lead vocals tonight" is respected on the vocal chair only', () => {
-  const shy = player('Shy', ['Vocals', 'Guitar'], { limits: { noLeadVocals: true } });
-  const lineup = buildLineup({
-    players: [shy],
-    song: song(),
-    settings: settings({ slots: [{ instrument: 'Vocals', count: 1 }, { instrument: 'Guitar', count: 1 }] }),
-    roundIndex: 0,
-  });
-  assert.deepEqual(seated(lineup, 'Vocals'), [null]);
-  assert.deepEqual(seated(lineup, 'Guitar'), [shy.id]);
-});
-
 test('players on a break are skipped', () => {
   const away = player('Away', ['Bass'], { present: false });
   const here = player('Here', ['Bass']);

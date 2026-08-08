@@ -10,7 +10,7 @@ const draft = {
   instruments: new Map(), // name -> level
   stances: {},
   unknownStance: 'maybe',
-  limits: { maxSongs: null, noLeadVocals: false },
+  limits: { maxSongs: null },
   notes: '',
 };
 
@@ -98,35 +98,7 @@ function instrumentPicker(selected, onChange, inputId = 'add-instrument') {
     },
   });
 
-  const levels = el('div', { class: 'stack' });
-  for (const [name, level] of selected) {
-    levels.append(
-      el('div', { class: 'instrument-line' },
-        el('div', { class: 'row' }, el('strong', {}, name)),
-        levelSwitch(level, (next) => { selected.set(name, next); onChange(); }),
-      ),
-    );
-  }
-
-  return el('div', { class: 'stack' },
-    chips,
-    input,
-    selected.size ? el('div', { class: 'stack' }, el('div', { class: 'label' }, 'How you play each one'), levels) : null,
-  );
-}
-
-/** Skill level is a three-way too, but with its own wording. */
-function levelSwitch(value, onChange) {
-  const box = el('div', { class: 'seg', role: 'group' });
-  const options = [['lead', 'Can lead'], ['comfortable', 'Comfortable'], ['learning', 'Learning']];
-  for (const [key, label] of options) {
-    box.append(el('button', {
-      type: 'button',
-      'aria-pressed': String(value === key),
-      onClick: () => onChange(key),
-    }, label));
-  }
-  return box;
+  return el('div', { class: 'stack' }, chips, input);
 }
 
 /**
@@ -208,7 +180,7 @@ function songSignup(you) {
   );
 }
 
-/** The boundaries block: personal cap, vocal opt-out, notes. */
+/** The boundaries block: personal cap and a note for the host. */
 function boundaries(target, onChange) {
   return el('div', { class: 'stack stack--lg' },
     el('div', { class: 'field' },
@@ -225,16 +197,6 @@ function boundaries(target, onChange) {
         }),
         el('span', { class: 'muted small' }, 'songs, then I am done'),
       ),
-    ),
-    el('label', { class: 'toggle' },
-      el('input', {
-        type: 'checkbox',
-        checked: target.limits.noLeadVocals,
-        onChange: (e) => { target.limits.noLeadVocals = e.target.checked; onChange(); },
-      }),
-      el('span', { class: 'toggle__track' }),
-      el('span', { class: 'toggle__text' }, 'Skip me for lead vocals',
-        el('small', {}, 'You will still be called for your instruments.')),
     ),
     el('div', { class: 'field' },
       el('label', { for: 'notes' }, 'Anything the host should know'),

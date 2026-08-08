@@ -371,7 +371,6 @@ function personCard(person, maxPlays) {
       outs ? el('span', {}, `· sits out ${outs}`) : null,
       maybes ? el('span', {}, `· ${maybes} maybe`) : null,
       person.limits?.maxSongs ? el('span', {}, `· caps at ${person.limits.maxSongs}`) : null,
-      person.limits?.noLeadVocals ? el('span', {}, '· no lead vocals') : null,
     ),
     person.notes ? el('div', { class: 'small muted' }, `“${person.notes}”`) : null,
     el('div', { class: 'row', style: { marginTop: '2px' } },

@@ -28,7 +28,7 @@ yourself — it carries the key that unlocks the console.
 
 | Screen | Who it is for | What it does |
 | --- | --- | --- |
-| `/` | Musicians, on their phones | Sign up, rate the setlist, set limits, see when you are up |
+| `/` | Musicians, on their phones | Sign in, sign up for songs, set limits, see when you are up |
 | `/host` | Whoever is running the night | Draw lineups, swap chairs, call the song, log it |
 | `/board` | A TV or spare laptop | The current lineup in room-sized type |
 
@@ -57,10 +57,9 @@ on stage who did not put themselves there.
 A lineup is a snapshot. If somebody withdraws or goes on a break after it was
 drawn, the host's call sheet flags it in red before the names get read out.
 
-There are three more limits people set for themselves:
+There are two more limits people set for themselves:
 
 - **A cap on turns** ("three songs and I'm done") — a hard stop.
-- **Skip me for lead vocals** — still called for their instruments.
 - **On a break** — keeps their place in the queue without being called.
 
 ## How the queue decides
@@ -72,8 +71,7 @@ For each chair, everyone who signed up is ranked:
    the front, and it is why someone arriving at 10pm is called next.
 3. **Signed up before not**.
 4. **The chair they asked for**, ahead of one they did not.
-5. **Longest wait** since they last played.
-6. **Whoever leads the instrument**, then whoever arrived first.
+5. **Longest wait** since they last played, then whoever arrived first.
 
 Three more things happen before the lineup is final:
 
