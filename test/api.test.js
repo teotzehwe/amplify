@@ -197,6 +197,93 @@ test('skipping a song leaves every turn count untouched', async () => {
   assert.equal(data.players.find((x) => x.id === p.data.id).stats.plays, 0);
 });
 
+test('a signed-in player can suggest songs, with no limit on how many', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const p = await joinAs('Suggester', ['Guitar']);
+
+  for (let i = 0; i < 25; i++) {
+    const res = await call('/songs', {
+      method: 'POST',
+      body: { title: `Idea ${i}`, artist: 'Someone' },
+      player: p.data.token,
+    });
+    assert.equal(res.status, 200, `suggestion ${i} should be accepted`);
+  }
+
+  const { data } = await call('/state');
+  assert.equal(data.songs.length, 25);
+  assert.ok(data.songs.every((s) => s.suggestedBy === p.data.id), 'each is credited to the suggester');
+});
+
+test('suggestions are refused when the host closes them', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const p = await joinAs('Hopeful', ['Guitar']);
+  await call('/host/settings', { method: 'PATCH', body: { allowSuggestions: false }, host: true });
+
+  const res = await call('/songs', { method: 'POST', body: { title: 'Nope' }, player: p.data.token });
+  assert.equal(res.status, 403);
+
+  // The host is never blocked by that setting.
+  assert.equal((await call('/songs', { method: 'POST', body: { title: 'Host pick' }, host: true })).status, 200);
+  await call('/host/settings', { method: 'PATCH', body: { allowSuggestions: true }, host: true });
+});
+
+test('a stranger with no sign-up cannot suggest songs', async () => {
+  const res = await call('/songs', { method: 'POST', body: { title: 'Drive-by' } });
+  assert.equal(res.status, 403);
+});
+
+test('you can take back your own suggestion, but not somebody else’s', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const mine = await joinAs('Mine', ['Guitar']);
+  const other = await joinAs('Other', ['Guitar']);
+
+  const song = await call('/songs', { method: 'POST', body: { title: 'Mine to pull' }, player: mine.data.token });
+
+  const wrong = await call(`/songs/${song.data.id}`, { method: 'DELETE', player: other.data.token });
+  assert.equal(wrong.status, 403);
+
+  const right = await call(`/songs/${song.data.id}`, { method: 'DELETE', player: mine.data.token });
+  assert.equal(right.status, 200);
+  assert.equal((await call('/state')).data.songs.length, 0);
+});
+
+test('a suggestion cannot be pulled once someone else has signed up for it', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const mine = await joinAs('Author', ['Guitar']);
+  const fan = await joinAs('Fan', ['Bass']);
+
+  const song = await call('/songs', { method: 'POST', body: { title: 'Popular' }, player: mine.data.token });
+  await call(`/players/${fan.data.id}`, {
+    method: 'PATCH', body: { stances: { [song.data.id]: 'in' } }, player: fan.data.token,
+  });
+
+  const blocked = await call(`/songs/${song.data.id}`, { method: 'DELETE', player: mine.data.token });
+  assert.equal(blocked.status, 400);
+  assert.match(blocked.data.error, /signed up for it/);
+
+  // The host can still remove it.
+  assert.equal((await call(`/songs/${song.data.id}`, { method: 'DELETE', host: true })).status, 200);
+});
+
+test('removing a song clears the sign-ups that pointed at it', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const p = await joinAs('Fan', ['Guitar']);
+  const song = await call('/songs', { method: 'POST', body: { title: 'Doomed' }, host: true });
+
+  await call(`/players/${p.data.id}`, {
+    method: 'PATCH',
+    body: { stances: { [song.data.id]: 'in' }, picks: { [song.data.id]: 'Guitar' } },
+    player: p.data.token,
+  });
+  await call(`/songs/${song.data.id}`, { method: 'DELETE', host: true });
+
+  const { data } = await call('/state');
+  const player = data.players.find((x) => x.id === p.data.id);
+  assert.deepEqual(player.stances, {}, 'no orphaned sign-up');
+  assert.deepEqual(player.picks, {}, 'no orphaned chair request');
+});
+
 test('unknown endpoints and methods are refused cleanly', async () => {
   assert.equal((await call('/nope')).status, 404);
   assert.equal((await call('/state', { method: 'DELETE' })).status, 404);

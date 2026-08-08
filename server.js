@@ -296,11 +296,36 @@ route('PATCH', /^\/api\/songs\/([\w-]+)$/, (ctx) => {
   return { ok: true };
 });
 
+/**
+ * The host can remove any song. Whoever suggested one can take it back too,
+ * but only while nobody else has signed up for it — once other people are
+ * counting on a song, pulling it is the host's call.
+ */
 route('DELETE', /^\/api\/songs\/([\w-]+)$/, (ctx) => {
-  requireHost(ctx);
+  const songId = ctx.params[0];
+  const song = store.state.songs.find((s) => s.id === songId);
+  if (!song) throw new HttpError(404, 'Song not found');
+
+  if (!store.isHost(ctx.hostToken)) {
+    const me = store.playerByToken(ctx.playerToken);
+    if (!me || song.suggestedBy !== me.id) throw new HttpError(403, 'That is not your suggestion');
+
+    const others = store.state.players.filter(
+      (p) => !p.removed && p.id !== me.id && p.stances?.[songId] === 'in',
+    );
+    if (others.length) {
+      throw bad(`${others.length === 1 ? 'Someone has' : `${others.length} people have`} signed up for it — ask the host to remove it`);
+    }
+  }
+
   store.update((state) => {
-    state.songs = state.songs.filter((s) => s.id !== ctx.params[0]);
-    if (state.current?.songId === ctx.params[0]) state.current = null;
+    state.songs = state.songs.filter((s) => s.id !== songId);
+    if (state.current?.songId === songId) state.current = null;
+    // Do not leave sign-ups pointing at a song that no longer exists.
+    for (const p of state.players) {
+      delete p.stances[songId];
+      delete p.picks[songId];
+    }
   });
   return { ok: true };
 });

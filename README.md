@@ -54,6 +54,12 @@ band, not by the host pinning them into a slot by hand. If a song cannot be
 staffed, Amplify says so and leaves the chair open rather than putting someone
 on stage who did not put themselves there.
 
+Anyone signed in can also **suggest songs**, as many as they want. A suggestion
+appears on every other phone immediately, credited to whoever added it, and
+everyone can sign up for it like any other song. You can take back your own
+suggestion until somebody else has signed up for it — after that it is the
+host's to remove, so nobody loses a song they were counting on.
+
 A lineup is a snapshot. If somebody withdraws or goes on a break after it was
 drawn, the host's call sheet flags it in red before the names get read out.
 
@@ -108,7 +114,8 @@ Turn counts are what drive fairness, so log songs as they happen.
 - **Also call people who did not sign up** — off by default, which is what makes
   sign-ups mean something. Turn it on for a loose night where you would rather
   fill every chair than wait for sign-ups.
-- **Let players suggest songs** — suggestions show who added them.
+- **Let players suggest songs** — on by default. Anyone signed in can add as
+  many as they like from their phone, and suggestions show who added them.
 - **Reset turn counts** for a second set, or **clear the night** entirely.
 
 ## Data and privacy

@@ -14,6 +14,12 @@ const draft = {
   notes: '',
 };
 
+/**
+ * Held outside the render so a live update from anyone else in the room
+ * cannot wipe a half-typed suggestion.
+ */
+const suggestion = { title: '', artist: '', key: '' };
+
 let state = null;
 /** Instruments are edited in a scratch copy so a live refresh cannot clobber typing. */
 let instrumentEdit = null;
@@ -127,17 +133,33 @@ function songSignup(you) {
     toast('Taken off that one');
   });
 
+  const unsuggest = guard(async (songId) => {
+    await api(`/songs/${songId}`, { method: 'DELETE' });
+    toast('Suggestion removed');
+  });
+
+  const suggesterName = (id) => state.players.find((p) => p.id === id)?.name;
+
   const list = el('div', {});
   for (const song of state.songs) {
     const signedUp = you.stances[song.id] === 'in';
     const chosen = you.picks?.[song.id] || you.instruments[0]?.name;
-    const meta = [song.artist, song.key && `key of ${song.key}`].filter(Boolean).join(' · ');
+    const mine = song.suggestedBy === you.id;
+    const from = !mine && song.suggestedBy ? suggesterName(song.suggestedBy) : null;
+    const meta = [song.artist, song.key && `key of ${song.key}`, from && `suggested by ${from}`]
+      .filter(Boolean).join(' · ');
 
     list.append(
       el('div', { class: `signup-row${signedUp ? ' signup-row--in' : ''}` },
         el('div', { class: 'grow' },
-          el('div', { class: 'song-row__title' }, song.title),
+          el('div', { class: 'row', style: { gap: '8px' } },
+            el('div', { class: 'song-row__title' }, song.title),
+            mine ? el('span', { class: 'tag tag--lead' }, 'your suggestion') : null,
+          ),
           el('div', { class: 'song-row__meta' }, meta || 'No details'),
+          mine
+            ? el('button', { class: 'btn btn--link', onClick: () => unsuggest(song.id) }, 'Remove suggestion')
+            : null,
         ),
 
         signedUp
@@ -177,6 +199,58 @@ function songSignup(you) {
       count
         ? `You're signed up for ${pluralize(count, 'song')}. Sign up for as many as you like.`
         : 'Sign up for one song at a time — as many as you want.'),
+  );
+}
+
+/**
+ * Suggest a song. No limit on how many — a jam runs on what the room wants
+ * to play, and the host can still turn suggestions off or remove any of them.
+ */
+function suggestSong(you) {
+  const add = guard(async () => {
+    if (!suggestion.title.trim()) return toast('It needs a title at least', 'error');
+    await api('/songs', {
+      method: 'POST',
+      body: { title: suggestion.title, artist: suggestion.artist, key: suggestion.key },
+    });
+    suggestion.title = '';
+    suggestion.artist = '';
+    suggestion.key = '';
+    toast('Added — sign up for it above');
+    draw();
+    document.getElementById('suggest-title')?.focus();
+  });
+
+  const field = (id, key, placeholder, style) => el('input', {
+    id,
+    type: 'text',
+    placeholder,
+    value: suggestion[key],
+    maxLength: 80,
+    style,
+    onInput: (e) => { suggestion[key] = e.target.value; },
+    onKeydown: (e) => e.key === 'Enter' && add(),
+  });
+
+  const mine = state.songs.filter((s) => s.suggestedBy === you.id);
+
+  return el('section', { class: 'card' },
+    el('div', { class: 'card__head' },
+      el('h2', {}, 'Suggest a song'),
+      el('span', { class: 'hint' }, 'As many as you like'),
+    ),
+    el('div', { class: 'stack' },
+      field('suggest-title', 'title', 'Song title'),
+      el('div', { class: 'row row--wrap' },
+        field('suggest-artist', 'artist', 'Artist (optional)', { flex: '1 1 140px' }),
+        field('suggest-key', 'key', 'Key', { flex: '0 1 90px' }),
+      ),
+      el('button', { class: 'btn btn--primary btn--block', onClick: add }, 'Add to the setlist'),
+      el('p', { class: 'section-note' },
+        mine.length
+          ? `You have suggested ${pluralize(mine.length, 'song')}. Everyone sees them straight away.`
+          : 'It shows up on everyone else\'s phone straight away, and they can sign up for it.'),
+    ),
   );
 }
 
@@ -342,6 +416,8 @@ function youView(you) {
       ),
       songSignup(you),
     ),
+
+    state.jam.allowSuggestions ? suggestSong(you) : null,
 
     section('instruments', 'Instruments',
       instrumentPicker(

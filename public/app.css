@@ -210,6 +210,18 @@ textarea { resize: vertical; min-height: 76px; }
 .btn--quiet { background: transparent; border-color: transparent; color: var(--faint); }
 .btn--quiet:hover { background: transparent; border-color: var(--ink-coral); color: var(--ink-coral); }
 
+/* An inline text action: clearly tappable, but not competing with Sign up. */
+.btn--link {
+  padding: 2px 0;
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-coral);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.btn--link:hover { background: transparent; color: var(--near-black); }
+
 .btn--block { width: 100%; }
 .btn--lg { padding: 15px 26px; font-size: 1.02rem; }
 .btn--sm { padding: 7px 13px; font-size: 0.82rem; }
