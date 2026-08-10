@@ -26,7 +26,7 @@ export function newId(prefix = '') {
   return prefix + randomBytes(8).toString('hex');
 }
 
-function defaultState() {
+function defaultState(hostKey) {
   return {
     jam: {
       name: 'Open Jam Night',
@@ -45,7 +45,7 @@ function defaultState() {
         { instrument: 'Keys', count: 1 },
       ],
     },
-    hostToken: newId(),
+    hostToken: hostKey || newId(),
     players: [],
     songs: [],
     rounds: [],
@@ -55,10 +55,13 @@ function defaultState() {
 }
 
 /** Fill in anything a hand-edited or older state file is missing. */
-function migrate(state) {
-  const base = defaultState();
+function migrate(state, hostKey) {
+  const base = defaultState(hostKey);
   const out = { ...base, ...state, jam: { ...base.jam, ...(state.jam || {}) } };
-  out.hostToken = state.hostToken || base.hostToken;
+  // A host key given by the environment outranks the stored one. On a hosted
+  // deploy the generated key is printed to a log nobody reads and stripped from
+  // every response, so setting it is the only way to know what it is.
+  out.hostToken = hostKey || state.hostToken || base.hostToken;
   out.players = (state.players || []).map((p) => ({
     limits: {},
     stances: {},
@@ -78,13 +81,25 @@ function migrate(state) {
 /* ------------------------------------------------------------ file backend */
 
 class FileBackend {
-  constructor(file) {
+  constructor(file, hostKey = '') {
     this.file = file;
     this.version = 0;
-    mkdirSync(dirname(file), { recursive: true });
-    // A single long-lived process owns the file, so it is read once and the
-    // in-memory copy is authoritative from then on.
-    this.state = existsSync(file) ? migrate(JSON.parse(readFileSync(file, 'utf8'))) : defaultState();
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+      // A single long-lived process owns the file, so it is read once and the
+      // in-memory copy is authoritative from then on.
+      this.state = existsSync(file)
+        ? migrate(JSON.parse(readFileSync(file, 'utf8')), hostKey)
+        : defaultState(hostKey);
+    } catch (err) {
+      // Nowhere to write — a serverless host with no key-value store set up.
+      // Construct anyway: this backend reports 'sse', which is the signal the
+      // serverless entry point turns into a 503 explaining what to configure.
+      // Throwing here instead would kill the function on import, before it
+      // could say anything at all.
+      if (!['ENOENT', 'EROFS', 'EACCES', 'EPERM'].includes(err.code)) throw err;
+      this.state = defaultState(hostKey);
+    }
   }
 
   async load() {
@@ -117,9 +132,10 @@ end
 return 0`;
 
 class KvBackend {
-  constructor(url, token, prefix = 'amplify') {
+  constructor(url, token, prefix = 'amplify', hostKey = '') {
     this.url = url.replace(/\/$/, '');
     this.token = token;
+    this.hostKey = hostKey;
     this.stateKey = `${prefix}:state`;
     this.versionKey = `${prefix}:version`;
   }
@@ -148,8 +164,8 @@ class KvBackend {
    */
   async load() {
     const [raw, version] = await this.command('MGET', this.stateKey, this.versionKey);
-    if (!raw) return { state: defaultState(), version: 0 };
-    return { state: migrate(JSON.parse(raw)), version: Number(version) || 0 };
+    if (!raw) return { state: defaultState(this.hostKey), version: 0 };
+    return { state: migrate(JSON.parse(raw), this.hostKey), version: Number(version) || 0 };
   }
 
   async save(state, expectedVersion) {
@@ -283,10 +299,12 @@ export class Store {
 export function openStore({ dataDir, env = process.env } = {}) {
   const url = env.KV_REST_API_URL || env.UPSTASH_REDIS_REST_URL;
   const token = env.KV_REST_API_TOKEN || env.UPSTASH_REDIS_REST_TOKEN;
+  const hostKey = env.HOST_KEY || '';
 
-  if (url && token) return new Store(new KvBackend(url, token, env.KV_PREFIX || 'amplify'));
+  if (url && token) {
+    return new Store(new KvBackend(url, token, env.KV_PREFIX || 'amplify', hostKey));
+  }
 
   const dir = dataDir || env.DATA_DIR || join(process.cwd(), 'data');
-  mkdirSync(dir, { recursive: true });
-  return new Store(new FileBackend(join(dir, 'jam.json')));
+  return new Store(new FileBackend(join(dir, 'jam.json'), hostKey));
 }

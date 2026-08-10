@@ -133,12 +133,15 @@ updates pushed over an event stream. Nothing to configure.
 **On Vercel** there is no disk and every request may hit a fresh instance, so
 it needs somewhere shared to keep the night:
 
-1. In your Vercel project, add a Redis store (Storage → Marketplace → Upstash
-   works). Vercel sets `KV_REST_API_URL` and `KV_REST_API_TOKEN` for you;
-   `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are accepted too.
-2. Deploy. `vercel.json` is already here — no build step, no dependencies.
-3. Open `/host` once and note the host key from `/api/state`, or run the server
-   locally against the same store to have it printed.
+1. In your Vercel project, add a Redis store — Storage → Marketplace → **Upstash
+   for Redis** (`upstash/upstash-kv`), not QStash, which is a message queue and
+   sets none of the variables below. Vercel fills in `KV_REST_API_URL` and
+   `KV_REST_API_TOKEN`; `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`
+   are accepted too.
+2. Set `HOST_KEY` to a secret of your choosing. Skip this and the host key is
+   generated per instance, printed to a log you cannot read, and stripped from
+   every response — leaving no way to open the host console.
+3. Deploy. `vercel.json` is already here — no build step, no dependencies.
 
 Amplify picks its backend from the environment: a key-value store when one is
 configured, the local file otherwise. Deploy without one and the API answers
@@ -180,6 +183,7 @@ Useful environment variables:
 | `KV_REST_API_URL` | — | Redis REST endpoint. Set it and the file store is not used |
 | `KV_REST_API_TOKEN` | — | Token for that endpoint |
 | `KV_PREFIX` | `amplify` | Key prefix, so two jams can share one store |
+| `HOST_KEY` | — | Fixes the host key instead of generating one. Hosted deploys never print theirs, so set this to a secret you choose |
 
 ## Tests
 

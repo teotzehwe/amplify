@@ -1,0 +1,8 @@
+# Live jam state — host key and every player's session token. Never upload it.
+data/
+*.tmp
+
+node_modules/
+test/
+.git/
+.DS_Store
