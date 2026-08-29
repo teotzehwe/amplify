@@ -1,6 +1,8 @@
 /* The musician's phone: sign up, say what you're comfortable with, see when you're up. */
 
-import { $, api, el, guard, masthead, pluralize, render, subscribe, toast, tokens } from './common.js';
+import {
+  $, api, approvedSongs, el, guard, masthead, pendingSongs, pluralize, render, subscribe, toast, tokens,
+} from './common.js';
 
 const app = $('#app');
 
@@ -9,9 +11,6 @@ const draft = {
   name: '',
   instruments: new Map(), // name -> level
   stances: {},
-  unknownStance: 'maybe',
-  limits: { maxSongs: null },
-  notes: '',
 };
 
 /**
@@ -91,6 +90,7 @@ function instrumentPicker(selected, onChange, inputId = 'add-instrument') {
     id: inputId,
     type: 'text',
     placeholder: 'Something else? Add it…',
+    'aria-label': 'Add an instrument that is not listed',
     maxLength: 40,
     onKeydown: (e) => {
       if (e.key !== 'Enter') return;
@@ -115,9 +115,10 @@ function instrumentPicker(selected, onChange, inputId = 'add-instrument') {
  * anything you have not signed up for simply is not a sign-up.
  */
 function songSignup(you) {
-  if (!state.songs.length) {
+  const songs = approvedSongs(state);
+  if (!songs.length) {
     return el('div', { class: 'empty' },
-      'No songs posted yet. The moment the host adds one it appears here to sign up for.');
+      'No songs on the setlist yet. The moment the host adds one — or waves a request through — it appears here to sign up for.');
   }
 
   const submit = guard(async (songId, instrument) => {
@@ -141,7 +142,7 @@ function songSignup(you) {
   const suggesterName = (id) => state.players.find((p) => p.id === id)?.name;
 
   const list = el('div', {});
-  for (const song of state.songs) {
+  for (const song of songs) {
     const signedUp = you.stances[song.id] === 'in';
     const chosen = you.picks?.[song.id] || you.instruments[0]?.name;
     const mine = song.suggestedBy === you.id;
@@ -192,13 +193,55 @@ function songSignup(you) {
     );
   }
 
-  const count = state.songs.filter((s) => you.stances[s.id] === 'in').length;
+  const count = songs.filter((s) => you.stances[s.id] === 'in').length;
   return el('div', { class: 'stack' },
     list,
     el('p', { class: 'section-note' },
       count
-        ? `You're signed up for ${pluralize(count, 'song')}. Sign up for as many as you like.`
-        : 'Sign up for one song at a time — as many as you want.'),
+        ? `You're signed up for ${pluralize(count, 'song')}. Your name goes up on the stage screen, and the host picks the band from that list.`
+        : 'Sign up for one song at a time — as many as you want. Your name goes up on the stage screen.'),
+  );
+}
+
+/**
+ * Requests of yours the host has not looked at yet. Worth showing even though
+ * there is nothing to do with them: without this, suggesting a song and then
+ * not finding it in the list above reads as the app having lost it.
+ */
+function pendingMine(you) {
+  const mine = pendingSongs(state).filter((s) => s.suggestedBy === you.id);
+  if (!mine.length) return null;
+
+  const unsuggest = guard(async (songId) => {
+    await api(`/songs/${songId}`, { method: 'DELETE' });
+    toast('Request withdrawn');
+  });
+
+  return el('section', { class: 'card card--cream' },
+    el('div', { class: 'card__head' },
+      el('h2', {}, 'Waiting on the host'),
+      el('span', { class: 'hint' }, pluralize(mine.length, 'request')),
+    ),
+    el('div', { class: 'stack' },
+      mine.map((song) =>
+        el('div', { class: 'signup-row' },
+          el('div', { class: 'grow' },
+            el('div', { class: 'song-row__title' }, song.title),
+            el('div', { class: 'song-row__meta' },
+              [song.artist, song.key && `key of ${song.key}`].filter(Boolean).join(' · ') || 'No details'),
+          ),
+          el('div', { class: 'row' },
+            el('span', { class: 'tag tag--maybe' }, 'Pending'),
+            el('button', {
+              class: 'btn btn--sm btn--quiet',
+              onClick: () => unsuggest(song.id),
+            }, 'Withdraw'),
+          ),
+        ),
+      ),
+      el('p', { class: 'section-note' },
+        'The host waves these through before anyone can sign up for them. Once approved it joins the setlist above.'),
+    ),
   );
 }
 
@@ -209,14 +252,14 @@ function songSignup(you) {
 function suggestSong(you) {
   const add = guard(async () => {
     if (!suggestion.title.trim()) return toast('It needs a title at least', 'error');
-    await api('/songs', {
+    const res = await api('/songs', {
       method: 'POST',
       body: { title: suggestion.title, artist: suggestion.artist, key: suggestion.key },
     });
     suggestion.title = '';
     suggestion.artist = '';
     suggestion.key = '';
-    toast('Added — sign up for it above');
+    toast(res.status === 'pending' ? 'Sent to the host' : 'Added — sign up for it above');
     draw();
     document.getElementById('suggest-title')?.focus();
   });
@@ -225,6 +268,7 @@ function suggestSong(you) {
     id,
     type: 'text',
     placeholder,
+    'aria-label': placeholder,
     value: suggestion[key],
     maxLength: 80,
     style,
@@ -233,8 +277,9 @@ function suggestSong(you) {
   });
 
   const mine = state.songs.filter((s) => s.suggestedBy === you.id);
+  const gated = state.jam.requireApproval;
 
-  return el('section', { class: 'card' },
+  return el('section', { class: 'card card--cream' },
     el('div', { class: 'card__head' },
       el('h2', {}, 'Suggest a song'),
       el('span', { class: 'hint' }, 'As many as you like'),
@@ -245,42 +290,12 @@ function suggestSong(you) {
         field('suggest-artist', 'artist', 'Artist (optional)', { flex: '1 1 140px' }),
         field('suggest-key', 'key', 'Key', { flex: '0 1 90px' }),
       ),
-      el('button', { class: 'btn btn--primary btn--block', onClick: add }, 'Add to the setlist'),
+      el('button', { class: 'btn btn--primary btn--block', onClick: add },
+        gated ? 'Send it to the host' : 'Add to the setlist'),
       el('p', { class: 'section-note' },
-        mine.length
-          ? `You have suggested ${pluralize(mine.length, 'song')}. Everyone sees them straight away.`
-          : 'It shows up on everyone else\'s phone straight away, and they can sign up for it.'),
-    ),
-  );
-}
-
-/** The boundaries block: personal cap and a note for the host. */
-function boundaries(target, onChange) {
-  return el('div', { class: 'stack stack--lg' },
-    el('div', { class: 'field' },
-      el('label', { for: 'maxSongs' }, 'Cap my turns tonight'),
-      el('div', { class: 'row' },
-        el('input', {
-          id: 'maxSongs',
-          type: 'number',
-          min: '1', max: '50',
-          placeholder: 'No limit',
-          value: target.limits.maxSongs ?? '',
-          style: { maxWidth: '150px' },
-          onInput: (e) => { target.limits.maxSongs = e.target.value ? Number(e.target.value) : null; onChange(); },
-        }),
-        el('span', { class: 'muted small' }, 'songs, then I am done'),
-      ),
-    ),
-    el('div', { class: 'field' },
-      el('label', { for: 'notes' }, 'Anything the host should know'),
-      el('textarea', {
-        id: 'notes',
-        maxLength: 280,
-        placeholder: 'Leaving at 10 · happy to solo but not sing · need a left-handed guitar…',
-        value: target.notes,
-        onInput: (e) => { target.notes = e.target.value; },
-      }),
+        gated
+          ? `The host checks requests before they join the setlist.${mine.length ? ` You have sent ${pluralize(mine.length, 'song')}.` : ''}`
+          : `It shows up on everyone else's phone straight away.${mine.length ? ` You have suggested ${pluralize(mine.length, 'song')}.` : ''}`),
     ),
   );
 }
@@ -300,9 +315,6 @@ function signupView() {
         name: draft.name,
         instruments: [...draft.instruments].map(([name, level]) => ({ name, level })),
         stances: draft.stances,
-        unknownStance: draft.unknownStance,
-        limits: draft.limits,
-        notes: draft.notes,
       },
     });
     tokens.player = res.token;
@@ -339,11 +351,6 @@ function signupView() {
       instrumentPicker(draft.instruments, redraw),
     ),
 
-    el('section', { class: 'card' },
-      el('div', { class: 'card__head' }, el('span', { class: 'step-num' }, '3'), el('h2', {}, 'Your limits')),
-      boundaries(draft, () => {}),
-    ),
-
     el('p', { class: 'section-note center' },
       'Next you can sign up for songs — one at a time, as many as you like.'),
 
@@ -357,7 +364,7 @@ function signupView() {
 
 function youView(you) {
   const onDeck = state.current;
-  const yourSlot = onDeck?.slots.find((s) => s.playerId === you.id);
+  const yourSlot = onDeck?.picks.find((p) => p.playerId === you.id);
   const song = onDeck ? state.songs.find((s) => s.id === onDeck.songId) : null;
 
   const save = guard(async (patch) => {
@@ -375,7 +382,7 @@ function youView(you) {
           el('div', { class: 'kicker' }, "You're up"),
           el('div', { class: 'what' }, `${yourSlot.instrument} · ${song ? song.title : 'Next song'}`),
           el('p', { class: 'muted small', style: { marginTop: '6px' } },
-            'Head up when the host calls it. Changed your mind? Hit Withdraw below and let the host know.'),
+            "Okay! You're in the queue, stay tuned for when the host calls everyone up!"),
         )
       : null,
 
@@ -417,6 +424,7 @@ function youView(you) {
       songSignup(you),
     ),
 
+    pendingMine(you),
     state.jam.allowSuggestions ? suggestSong(you) : null,
 
     section('instruments', 'Instruments',
@@ -437,18 +445,6 @@ function youView(you) {
           toast('Instruments updated');
         }),
       }, 'Save instruments'),
-    ),
-
-    section('limits', 'Your limits',
-      boundaries(you, () => save({
-        unknownStance: you.unknownStance,
-        limits: you.limits,
-        notes: you.notes,
-      })),
-      el('button', {
-        class: 'btn btn--sm',
-        onClick: () => save({ notes: you.notes, limits: you.limits, unknownStance: you.unknownStance }),
-      }, 'Save notes'),
     ),
 
     el('div', { class: 'center' },

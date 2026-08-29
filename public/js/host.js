@@ -1,7 +1,8 @@
-/* The host console: pick a song, get a fair lineup, call it out. */
+/* The host console: put a song on deck, pick the band by hand, call it out. */
 
 import {
-  $, api, el, guard, masthead, playedSongIds, pluralize, render, subscribe, toast, tokens, upNext,
+  $, api, approvedSongs, coverageFor, el, guard, masthead, pendingSongs, playedSongIds,
+  pluralize, render, signupsFor, subscribe, toast, tokens, upNext,
 } from './common.js';
 import { qrSvg } from './qr.js';
 
@@ -84,28 +85,64 @@ const TABS = [
 
 function console_() {
   const present = state.players.filter((p) => p.present).length;
-  const counts = { roster: state.players.length, songs: state.songs.length };
+  const waiting = pendingSongs(state).length;
+  const counts = { roster: state.players.length, songs: approvedSongs(state).length };
 
   return el('div', { class: 'stack stack--lg' },
     masthead(state.jam.name, `${pluralize(state.roundIndex, 'song')} played · ${present} here now`,
       el('a', { class: 'btn btn--ghost btn--sm', href: '/board', target: '_blank' }, 'Stage display ↗'),
     ),
 
-    el('nav', { class: 'tabs', role: 'tablist' },
+    el('nav', { class: 'tabs', role: 'tablist', 'aria-label': 'Console sections' },
       TABS.map(([id, label]) =>
         el('button', {
           role: 'tab',
+          id: `tab-${id}`,
           'aria-selected': String(tab === id),
+          'aria-controls': `panel-${id}`,
+          // Roving tabindex: the strip is one stop, arrows move within it.
+          // Announcing these as tabs without that is worse than not announcing
+          // them — it promises a keyboard model that then does not work.
+          tabIndex: tab === id ? 0 : -1,
+          onKeydown: onTabKey,
           onClick: () => { tab = id; draw(); },
-        }, label, counts[id] != null ? el('span', { class: 'count' }, counts[id]) : null),
+        }, label,
+          counts[id] != null ? el('span', { class: 'count' }, counts[id]) : null,
+          // Requests waiting on you are the one thing worth pulling attention
+          // to across tabs — an unvetted song is invisible to the room.
+          id === 'songs' && waiting
+            ? el('span', { class: 'count count--alert' }, `${waiting} new`)
+            : null,
+        ),
       ),
     ),
 
-    tab === 'now' ? nowTab() : null,
-    tab === 'roster' ? rosterTab() : null,
-    tab === 'songs' ? songsTab() : null,
-    tab === 'settings' ? settingsTab() : null,
+    el('div', { role: 'tabpanel', id: `panel-${tab}`, 'aria-labelledby': `tab-${tab}` },
+      tab === 'now' ? nowTab() : null,
+      tab === 'roster' ? rosterTab() : null,
+      tab === 'songs' ? songsTab() : null,
+      tab === 'settings' ? settingsTab() : null,
+    ),
   );
+}
+
+/** Arrow / Home / End across the tab strip, per the ARIA tabs pattern. */
+function onTabKey(e) {
+  const ids = TABS.map(([id]) => id);
+  const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+
+  let next;
+  if (step) next = ids[(ids.indexOf(tab) + step + ids.length) % ids.length];
+  else if (e.key === 'Home') next = ids[0];
+  else if (e.key === 'End') next = ids[ids.length - 1];
+  else return;
+
+  e.preventDefault();
+  tab = next;
+  draw();
+  // The whole console is rebuilt on draw, so the focused button is gone by
+  // now. Put focus back where the user just moved it.
+  document.getElementById(`tab-${next}`)?.focus();
 }
 
 /* -------------------------------------------------------------------- now */
@@ -117,13 +154,15 @@ function nowTab() {
 const songById = (id) => state.songs.find((s) => s.id === id) || null;
 const playerById = (id) => state.players.find((p) => p.id === id) || null;
 
-const drawLineup = (songId) => guard(async () => {
-  await api('/host/lineup', { method: 'POST', body: { songId, locks: {} } });
+const putOnDeck = (songId) => guard(async () => {
+  await api('/host/lineup', { method: 'POST', body: { songId } });
   tab = 'now';
 })();
 
-/** Song picker with a live read on who can actually play each one. */
+/** Song picker, with a live read on how many people have put their name down. */
 function songChooser() {
+  const songs = approvedSongs(state);
+
   if (!state.players.length) {
     return el('section', { class: 'card' },
       el('div', { class: 'empty' },
@@ -132,61 +171,113 @@ function songChooser() {
   }
 
   const query = songQuery.trim().toLowerCase();
-  const matches = state.songs.filter((s) =>
-    !query || `${s.title} ${s.artist}`.toLowerCase().includes(query));
+  const matches = songs.filter((s) => !query || `${s.title} ${s.artist}`.toLowerCase().includes(query));
 
   return el('div', { class: 'stack' },
     el('section', { class: 'card stack' },
       el('div', { class: 'card__head' },
         el('h2', {}, "What's next?"),
-        el('span', { class: 'hint' }, 'Pick a song and Amplify builds the band'),
+        el('span', { class: 'hint' }, 'You pick the band — Amplify just keeps the list'),
       ),
-      state.songs.length > 4
+      songs.length > 4
         ? el('input', {
             id: 'song-filter',
             type: 'search',
             placeholder: 'Filter songs…',
+            'aria-label': 'Filter the setlist by title or artist',
             value: songQuery,
             onInput: (e) => { songQuery = e.target.value; draw(); },
           })
         : null,
 
-      state.songs.length
+      songs.length
         ? el('div', { class: 'stack' }, matches.map(songChoice))
-        : el('div', { class: 'empty' }, 'No songs yet — add a few under the Songs tab.'),
+        : el('div', { class: 'empty' }, 'No songs on the setlist yet — add a few under the Songs tab.'),
 
       el('hr', { class: 'divider' }),
       el('button', {
         class: 'btn btn--ghost btn--block',
-        onClick: () => drawLineup(null),
-      }, 'Free jam — build a band with no song set'),
+        onClick: () => putOnDeck(null),
+      }, 'Free jam — pick a band with no song set'),
     ),
   );
 }
 
 function songChoice(song) {
-  const r = state.readiness[song.id] || { in: 0, maybe: 0, out: 0, gaps: [], playable: true };
-  return el('div', { class: 'song-card' },
+  const signups = signupsFor(state, song.id);
+  const here = signups.filter((s) => s.present).length;
+
+  return el('div', { class: 'song-card song-card--plain' },
     el('div', {},
       el('div', { class: 'song-card__title' }, song.title),
       el('div', { class: 'muted small' },
         [song.artist, song.key && `key of ${song.key}`].filter(Boolean).join(' · ') || '—'),
       el('div', { class: 'readiness' },
-        el('span', { class: 'tag tag--in' }, el('i', { class: 'dot dot--in' }), `${r.in} signed up`),
-        r.maybe ? el('span', { class: 'tag' }, `${r.maybe} have not`) : null,
-        r.out ? el('span', { class: 'tag tag--out' }, el('i', { class: 'dot dot--out' }), `${r.out} sitting out`) : null,
-        r.gaps.length ? el('span', { class: 'tag tag--out' }, `No ${r.gaps.join(', no ')}`) : null,
+        signups.length
+          ? el('span', { class: 'tag tag--in' },
+              el('i', { class: 'dot dot--in' }), `${signups.length} signed up`)
+          : el('span', { class: 'tag' }, 'Nobody signed up yet'),
+        signups.length && here < signups.length
+          ? el('span', { class: 'tag tag--maybe' }, `${signups.length - here} on a break`)
+          : null,
       ),
     ),
-    el('button', { class: 'btn btn--primary', onClick: () => drawLineup(song.id) }, 'Draw lineup'),
+    el('button', { class: 'btn btn--primary', onClick: () => putOnDeck(song.id) }, 'Put on deck'),
   );
 }
 
-/** The lineup on deck: who plays what, why, and one-tap swaps. */
+/* --------------------------------------------------------------- the picker */
+
+/**
+ * Who the host may pick from. For a song that is the sign-up sheet and nothing
+ * else — the API refuses anyone not on it, so this list and the rule agree by
+ * construction. A free jam has no sheet, so the room itself is the list.
+ */
+function candidatesFor(current) {
+  if (current.songId) return signupsFor(state, current.songId);
+  return state.players
+    .filter((p) => p.present)
+    .map((p) => ({
+      playerId: p.id,
+      name: p.name,
+      instrument: p.instruments[0]?.name || '',
+      present: true,
+      plays: p.stats.plays,
+      lastRound: p.stats.lastRound,
+      cap: p.limits?.maxSongs ?? null,
+    }))
+    .sort((a, b) =>
+      a.plays - b.plays ||
+      (a.lastRound ?? -1) - (b.lastRound ?? -1) ||
+      a.name.localeCompare(b.name));
+}
+
+/**
+ * What the host needs to know to be fair, in the order they need it. None of
+ * this stops anybody being picked — it is the information a person running the
+ * room would otherwise be holding in their head.
+ */
+function notesFor(who) {
+  const notes = [];
+  if (!who.present) notes.push('on a break');
+  if (who.plays === 0) notes.push('not up yet tonight');
+  else notes.push(pluralize(who.plays, 'turn'));
+  if (who.lastRound != null && who.lastRound === state.roundIndex - 1) notes.push('played the last song');
+  if (who.cap != null && who.plays >= who.cap) notes.push(`at their cap of ${who.cap}`);
+  return notes;
+}
+
+/** The song on deck: who is on it, who else put their name down. */
 function callSheet(current) {
   const song = songById(current.songId);
-  const filled = current.slots.filter((s) => s.playerId).length;
-  const hasPicks = Object.keys(current.locks || {}).length > 0;
+  const candidates = candidatesFor(current);
+  const seated = new Map(current.picks.map((p) => [p.playerId, p.instrument]));
+  const bench = candidates.filter((c) => !seated.has(c.playerId));
+
+  const pick = guard((playerId, instrument) =>
+    api('/host/pick', { method: 'POST', body: { playerId, instrument } }));
+  const unpick = guard((playerId) =>
+    api('/host/unpick', { method: 'POST', body: { playerId } }));
 
   return el('div', { class: 'stack' },
     el('section', { class: 'card stack' },
@@ -198,45 +289,25 @@ function callSheet(current) {
             song ? [song.artist, song.key && `key of ${song.key}`].filter(Boolean).join(' · ') : 'No song set',
           ),
         ),
-        el('div', { class: 'row' },
-          hasPicks
-            ? el('button', {
-                class: 'btn btn--ghost btn--sm',
-                onClick: guard(() => api('/host/lineup', { method: 'POST', body: { songId: current.songId, locks: {} } })),
-              }, 'Clear my picks')
-            : null,
-          el('button', {
-            class: 'btn btn--sm',
-            onClick: guard(() => api('/host/lineup', {
-              method: 'POST',
-              body: { songId: current.songId, locks: current.locks },
-            })),
-          }, 'Redraw'),
-        ),
       ),
 
-      // A lineup is a snapshot. If someone withdraws or steps out after it was
-      // drawn, say so here rather than letting the host call a name that is no
-      // longer good.
-      el('div', { class: 'stack', style: { gap: '8px' } },
-        staleSeats(current, song).map((w) => el('div', { class: 'alert alert--error' }, w)),
-        current.warnings.map((w) => el('div', { class: 'alert alert--warn' }, w)),
-      ),
-
-      el('div', { class: 'stack', style: { gap: '8px' } }, current.slots.map(slotRow)),
+      onStage(current, song, unpick),
+      coverage(song),
+      benchList(bench, current, pick),
 
       el('div', { class: 'row row--wrap', style: { marginTop: '6px' } },
         el('button', {
           class: 'btn btn--primary btn--lg grow',
+          disabled: !current.picks.length,
           onClick: () => { calloutOpen = true; draw(); },
         }, 'Call it out'),
         el('button', {
           class: 'btn btn--lg',
-          disabled: !filled,
+          disabled: !current.picks.length,
           onClick: guard(async () => {
             await api('/host/commit', { method: 'POST' });
             calloutOpen = false;
-            toast('Logged — everyone on stage moves down the queue');
+            toast('Logged — turn counts updated');
           }),
         }, 'Played ✓'),
         el('button', {
@@ -245,68 +316,119 @@ function callSheet(current) {
         }, 'Cancel'),
       ),
       el('p', { class: 'section-note' },
-        'Played ✓ counts everyone on stage. Cancel drops the lineup without counting turns.'),
+        'Played ✓ counts a turn for everyone on stage. Cancel clears the deck without counting anything.'),
     ),
   );
 }
 
 /**
- * Seats that have gone stale since the lineup was drawn — someone withdrew
- * their sign-up or went on a break. Redrawing clears these.
+ * The band as it stands. Empty until the host starts picking — by design.
+ *
+ * A pick is a snapshot of a moment. Somebody can withdraw or step out after
+ * being seated, and the tool does not quietly drop them — vanishing from the
+ * lineup mid-selection would be its own surprise. It says so instead, so the
+ * name is never called out cold.
  */
-function staleSeats(current, song) {
-  const notes = [];
-  for (const slot of current.slots) {
-    const player = slot.playerId ? playerById(slot.playerId) : null;
-    if (!player) continue;
-    if (!player.present) {
-      notes.push(`${player.name} (${slot.instrument}) is on a break now — redraw before calling it.`);
-    } else if (song && player.stances?.[song.id] !== 'in') {
-      notes.push(`${player.name} (${slot.instrument}) withdrew from this song — redraw before calling it.`);
-    }
-  }
-  return notes;
+function onStage(current, song, unpick) {
+  return el('div', { class: 'stack', style: { gap: '8px' } },
+    el('div', { class: 'card__head' },
+      el('h3', { class: 'sub-head' }, 'On stage'),
+      el('span', { class: 'hint' }, pluralize(current.picks.length, 'musician')),
+    ),
+    current.picks.length
+      ? current.picks.map((p) => {
+          const player = playerById(p.playerId);
+          const withdrawn = player && song && player.stances?.[song.id] !== 'in';
+          const away = player && player.present === false;
+
+          return el('div', { class: `slot${withdrawn || away ? ' slot--resting' : ''}` },
+            el('div', { class: 'slot__inst' }, p.instrument || '—'),
+            el('div', { class: 'slot__who' },
+              el('div', { class: 'slot__name' }, player?.name || 'Unknown'),
+              withdrawn
+                ? el('div', { class: 'slot__why' },
+                    'Withdrew from this song — take them off before you call it')
+                : away
+                  ? el('div', { class: 'slot__why' }, 'On a break now — check before you call it')
+                  : null,
+            ),
+            el('button', {
+              class: 'btn btn--sm btn--quiet',
+              onClick: () => unpick(p.playerId),
+            }, 'Take off'),
+          );
+        })
+      : el('div', { class: 'empty' },
+          'Nobody yet. Pick from the sign-ups below — tap a name to put them on.'),
+  );
 }
 
-function slotRow(slot) {
-  const player = playerById(slot.playerId);
-  const classes = ['slot'];
-  if (!player) classes.push('slot--empty');
-  else if (slot.locked) classes.push('slot--locked');
-  else if (slot.resting) classes.push('slot--resting');
+/** Sign-ups against the band template. Advice, never a gate. */
+function coverage(song) {
+  const rows = coverageFor(state, song);
+  if (!rows.length) return null;
 
-  const picker = el('select', {
-    'aria-label': `Who plays ${slot.instrument}`,
-    onChange: guard((e) => api('/host/assign', {
-      method: 'POST',
-      body: { slotKey: slot.key, playerId: e.target.value || null },
-    })),
-  });
-  if (player) picker.append(el('option', { value: player.id, selected: true }, `${player.name} — on stage`));
-  for (const alt of slot.alternates) {
-    picker.append(el('option', { value: alt.id },
-      `${alt.name} — ${pluralize(alt.plays, 'turn')}${alt.rested ? '' : ' (needs a rest)'}`));
+  return el('div', { class: 'row row--wrap', style: { gap: '6px' } },
+    rows.map((row) =>
+      el('span', { class: `tag${row.want && row.got < row.want ? ' tag--out' : ' tag--in'}` },
+        `${row.instrument} ${row.got}${row.want ? `/${row.want}` : ''}`)),
+  );
+}
+
+/** Everyone who signed up and is not on stage yet. Tap to seat them. */
+function benchList(bench, current, pick) {
+  const heading = el('div', { class: 'card__head' },
+    el('h3', { class: 'sub-head' }, current.songId ? 'Signed up' : 'In the room'),
+    el('span', { class: 'hint' }, `${bench.length} available · fewest turns first`),
+  );
+
+  if (!bench.length) {
+    return el('div', { class: 'stack', style: { gap: '8px' } },
+      heading,
+      el('div', { class: 'empty' },
+        current.songId
+          ? 'Nobody else has signed up for this one. Only people who put their name down can be called.'
+          : 'Everybody in the room is already on stage.'),
+    );
   }
-  picker.append(el('option', { value: '', selected: !player }, 'Leave empty'));
 
-  return el('div', { class: classes.join(' ') },
-    el('div', { class: 'slot__inst' }, slot.instrument),
-    el('div', {},
-      player
-        ? el('div', { class: 'slot__name' }, player.name,
-            slot.locked ? el('span', { class: 'tag tag--lead', style: { marginLeft: '8px' } }, 'your pick') : null,
-            slot.resting ? el('span', { class: 'tag tag--maybe', style: { marginLeft: '8px' } }, 'no rest') : null)
-        : el('div', { class: 'slot__name slot__name--empty' },
-            slot.blank ? 'Left open' : 'Nobody available'),
-      slot.reason ? el('div', { class: 'slot__why' }, slot.reason) : null,
+  return el('div', { class: 'stack', style: { gap: '8px' } },
+    heading,
+    el('div', { class: 'stack', style: { gap: '6px' } },
+      bench.map((who) => {
+        const player = playerById(who.playerId);
+        const options = player?.instruments?.length ? player.instruments.map((i) => i.name) : [who.instrument];
+        const selectId = `inst-${who.playerId}`;
+
+        return el('div', { class: `pick-row${who.present ? '' : ' pick-row--away'}` },
+          el('div', { class: 'grow' },
+            el('div', { class: 'pick-row__name' }, who.name),
+            el('div', { class: 'pick-row__why' }, notesFor(who).join(' · ')),
+          ),
+          options.length > 1
+            ? el('select', {
+                id: selectId,
+                'aria-label': `Instrument for ${who.name}`,
+                value: who.instrument,
+              }, options.map((name) =>
+                el('option', { value: name, selected: name === who.instrument }, name)))
+            : el('span', { class: 'tag' }, who.instrument || '—'),
+          el('button', {
+            class: 'btn btn--primary btn--sm',
+            onClick: () => pick(
+              who.playerId,
+              options.length > 1 ? $(`#${selectId}`)?.value : who.instrument,
+            ),
+          }, 'Put on'),
+        );
+      }),
     ),
-    picker,
   );
 }
 
 /* ------------------------------------------------------------------ roster */
 
-/** Roster ordered the way the queue sees it: next in line at the top. */
+/** Roster ordered the way a fair host would read it: longest wait at the top. */
 function queueOrder(players) {
   return [...players].sort((a, b) =>
     a.stats.plays - b.stats.plays ||
@@ -334,13 +456,13 @@ function rosterTab() {
       ),
       waiting
         ? el('div', { class: 'alert alert--info', style: { marginTop: '14px' } },
-            `${pluralize(waiting, 'person', 'people')} ${waiting === 1 ? 'has' : 'have'} not played yet — they sit at the front of the queue.`)
+            `${pluralize(waiting, 'person', 'people')} ${waiting === 1 ? 'has' : 'have'} not played yet tonight.`)
         : null,
     ),
     el('section', { class: 'card' },
       el('div', { class: 'card__head' },
-        el('h2', {}, 'Queue order'),
-        el('span', { class: 'hint' }, 'Next in line first'),
+        el('h2', {}, 'Who has played what'),
+        el('span', { class: 'hint' }, 'Longest wait first'),
       ),
       el('div', { class: 'roster' }, queueOrder(state.players).map((p) => personCard(p, maxPlays))),
     ),
@@ -348,9 +470,7 @@ function rosterTab() {
 }
 
 function personCard(person, maxPlays) {
-  const stances = Object.values(person.stances || {});
-  const outs = stances.filter((s) => s === 'out').length;
-  const maybes = stances.filter((s) => s === 'maybe').length;
+  const signedUp = Object.values(person.stances || {}).filter((s) => s === 'in').length;
   const save = guard((patch) => api(`/players/${person.id}`, { method: 'PATCH', body: patch }));
 
   return el('div', { class: `person${person.present ? '' : ' person--away'}` },
@@ -369,8 +489,7 @@ function personCard(person, maxPlays) {
       el('span', {}, person.stats.lastRound == null
         ? 'Not up yet tonight'
         : `Last played song ${person.stats.lastRound + 1}`),
-      outs ? el('span', {}, `· sits out ${outs}`) : null,
-      maybes ? el('span', {}, `· ${maybes} maybe`) : null,
+      el('span', {}, `· signed up for ${signedUp}`),
       person.limits?.maxSongs ? el('span', {}, `· caps at ${person.limits.maxSongs}`) : null,
     ),
     person.notes ? el('div', { class: 'small muted' }, `“${person.notes}”`) : null,
@@ -407,48 +526,103 @@ function songsTab() {
     });
     for (const id of ['#s-title', '#s-artist', '#s-key']) $(id).value = '';
     $('#s-title').focus();
-    toast('Added — everyone can rate it now');
+    toast('Added to the setlist');
   });
 
+  const queue = approvedSongs(state);
+
   return el('div', { class: 'stack' },
+    requests(),
+
     el('section', { class: 'card stack' },
       el('div', { class: 'card__head' }, el('h2', {}, 'Add a song')),
       el('div', { class: 'row row--wrap' },
         el('input', { id: 's-title', type: 'text', placeholder: 'Title', class: 'grow',
-          onKeydown: (e) => e.key === 'Enter' && add() }),
+          'aria-label': 'Song title', onKeydown: (e) => e.key === 'Enter' && add() }),
         el('input', { id: 's-artist', type: 'text', placeholder: 'Artist', class: 'grow',
-          onKeydown: (e) => e.key === 'Enter' && add() }),
+          'aria-label': 'Artist', onKeydown: (e) => e.key === 'Enter' && add() }),
         el('input', { id: 's-key', type: 'text', placeholder: 'Key', style: { maxWidth: '110px' },
-          onKeydown: (e) => e.key === 'Enter' && add() }),
+          'aria-label': 'Musical key', onKeydown: (e) => e.key === 'Enter' && add() }),
         el('button', { class: 'btn btn--primary', onClick: add }, 'Add'),
       ),
       el('p', { class: 'section-note' },
-        'Everyone signed up sees new songs immediately and can mark how they feel about them.'),
+        'Anything you add here goes straight onto the setlist — you are the one doing the vetting.'),
     ),
 
     el('section', { class: 'card stack' },
       el('div', { class: 'card__head' },
-        el('h2', {}, 'The queue'),
+        el('h2', {}, 'The setlist'),
         el('span', { class: 'hint' },
-          `${pluralize(state.songs.length, 'song')} · the top one not yet played is up next`),
+          `${pluralize(queue.length, 'song')} · the top one not yet played is up next`),
       ),
-      state.songs.length
-        ? el('div', { class: 'stack', style: { gap: '10px' } },
-            state.songs.map((song, i) => songAdminCard(song, i)))
+      queue.length
+        ? el('div', { class: 'stack', style: { gap: '10px' } }, queue.map(songAdminCard))
         : el('div', { class: 'empty' }, 'Nothing here yet. Add the songs you expect to call tonight.'),
     ),
   );
 }
 
+/**
+ * Song requests from the room, waiting on a yes or no.
+ *
+ * These sit above everything else on the tab because a request nobody has
+ * looked at is invisible to the person who made it — they can see it on their
+ * own phone marked pending, and nowhere else.
+ */
+function requests() {
+  const waiting = pendingSongs(state);
+  if (!waiting.length) return null;
+
+  const approve = guard(async (song) => {
+    await api(`/host/songs/${song.id}/approve`, { method: 'POST' });
+    toast(`“${song.title}” is on the setlist`);
+  });
+
+  const decline = guard(async (song) => {
+    if (!confirm(`Decline “${song.title}”? It disappears from the person who asked.`)) return;
+    await api(`/songs/${song.id}`, { method: 'DELETE' });
+    toast('Declined');
+  });
+
+  return el('section', { class: 'card stack card--alert' },
+    el('div', { class: 'card__head' },
+      el('h2', {}, 'Requests'),
+      el('span', { class: 'hint' }, `${pluralize(waiting.length, 'song')} waiting on you`),
+    ),
+    el('div', { class: 'stack', style: { gap: '10px' } },
+      waiting.map((song) => {
+        const from = song.suggestedBy ? playerById(song.suggestedBy) : null;
+        return el('div', { class: 'song-card song-card--plain' },
+          el('div', {},
+            el('div', { class: 'song-card__title' }, song.title),
+            el('div', { class: 'muted small' },
+              [song.artist, song.key && `key of ${song.key}`, from && `asked for by ${from.name}`]
+                .filter(Boolean).join(' · ') || '—'),
+          ),
+          el('div', { class: 'row row--wrap' },
+            el('button', { class: 'btn btn--primary btn--sm', onClick: () => approve(song) }, 'Approve'),
+            el('button', { class: 'btn btn--sm btn--quiet', onClick: () => decline(song) }, 'Decline'),
+          ),
+        );
+      }),
+    ),
+    el('p', { class: 'section-note' },
+      'Nobody can sign up for a request until you approve it. Declining removes it.'),
+  );
+}
+
 /** Rewrite the whole queue order from a moved song. */
 const reorder = (songId, toIndex) => guard(() => {
-  const ids = state.songs.map((s) => s.id).filter((id) => id !== songId);
+  const ids = approvedSongs(state).map((s) => s.id).filter((id) => id !== songId);
   ids.splice(Math.max(0, Math.min(ids.length, toIndex)), 0, songId);
+  // Pending songs are not in the queue, so they are appended untouched — the
+  // server keeps anything the client left out, in its existing order.
   return api('/host/songs/order', { method: 'POST', body: { order: ids } });
 })();
 
 function songAdminCard(song, index) {
-  const r = state.readiness[song.id] || { in: 0, maybe: 0, out: 0, gaps: [] };
+  const queue = approvedSongs(state);
+  const signups = signupsFor(state, song.id);
   const suggester = song.suggestedBy ? playerById(song.suggestedBy) : null;
   const played = playedSongIds(state).has(song.id);
   const onDeck = state.current?.songId === song.id;
@@ -458,16 +632,20 @@ function songAdminCard(song, index) {
     class: `song-card${isNext ? ' song-card--next' : ''}${onDeck ? ' song-card--deck' : ''}${played && !onDeck ? ' song-card--played' : ''}`,
   },
     el('div', { class: 'queue-move' },
+      // The glyph alone announces as "black up-pointing triangle", which says
+      // neither what it does nor to which song.
       el('button', {
         class: 'btn btn--icon btn--ghost',
         title: 'Move up',
+        'aria-label': `Move ${song.title} up the queue`,
         disabled: index === 0,
         onClick: () => reorder(song.id, index - 1),
       }, '▲'),
       el('button', {
         class: 'btn btn--icon btn--ghost',
         title: 'Move down',
-        disabled: index === state.songs.length - 1,
+        'aria-label': `Move ${song.title} down the queue`,
+        disabled: index === queue.length - 1,
         onClick: () => reorder(song.id, index + 1),
       }, '▼'),
     ),
@@ -479,15 +657,12 @@ function songAdminCard(song, index) {
         played ? el('span', { class: 'tag' }, 'played') : null,
       ),
       el('div', { class: 'muted small' },
-        [song.artist, song.key && `key of ${song.key}`, suggester && `suggested by ${suggester.name}`]
+        [song.artist, song.key && `key of ${song.key}`, suggester && `asked for by ${suggester.name}`]
           .filter(Boolean).join(' · ') || '—'),
       el('div', { class: 'readiness' },
-        el('span', { class: 'tag tag--in' }, `${r.in} signed up`),
-        r.maybe ? el('span', { class: 'tag' }, `${r.maybe} have not`) : null,
-        r.out ? el('span', { class: 'tag tag--out' }, `${r.out} sitting out`) : null,
-        r.gaps.length
-          ? el('span', { class: 'tag tag--out' }, `Cannot staff: ${r.gaps.join(', ')}`)
-          : el('span', { class: 'tag tag--in' }, 'Full band available'),
+        signups.length
+          ? el('span', { class: 'tag tag--in' }, `${signups.length} signed up`)
+          : el('span', { class: 'tag' }, 'Nobody signed up yet'),
       ),
     ),
     el('div', { class: 'row row--wrap' },
@@ -498,7 +673,7 @@ function songAdminCard(song, index) {
             onClick: () => reorder(song.id, 0),
           }, 'Play next')
         : null,
-      el('button', { class: 'btn btn--sm', onClick: () => drawLineup(song.id) }, 'Draw'),
+      el('button', { class: 'btn btn--sm', onClick: () => putOnDeck(song.id) }, 'On deck'),
       el('button', {
         class: 'btn btn--sm btn--quiet',
         onClick: guard(async () => {
@@ -537,11 +712,11 @@ function settingsTab() {
         el('div', { class: 'stack grow' },
           el('div', { class: 'row row--wrap' },
             el('input', { type: 'text', readOnly: true, class: 'mono grow', value: signupUrl,
-              onFocus: (e) => e.target.select() }),
+              'aria-label': 'Sign-up link', onFocus: (e) => e.target.select() }),
             el('button', { class: 'btn', onClick: copy(signupUrl) }, 'Copy link'),
           ),
           el('p', { class: 'section-note' },
-            'Anyone on the same wifi can scan this or type the link. The stage display shows the same code between songs.'),
+            'Anyone on the same wifi can scan this or type the link. The stage display shows the same code.'),
           el('button', {
             class: 'btn btn--ghost btn--sm',
             onClick: () => window.print(),
@@ -552,34 +727,13 @@ function settingsTab() {
 
     el('section', { class: 'card stack stack--lg' },
       el('div', { class: 'card__head' }, el('h2', {}, 'The band')),
-      el('p', { class: 'section-note' }, 'Chairs Amplify fills for each song.'),
+      el('p', { class: 'section-note' },
+        'The chairs you usually want filled. This is a readout on the sign-up sheet, not a limit — pick whoever you like.'),
       slotEditor(jam.slots, (slots) => save({ slots })),
     ),
 
     el('section', { class: 'card stack stack--lg' },
-      el('div', { class: 'card__head' }, el('h2', {}, 'Rotation')),
-      el('div', { class: 'field' },
-        el('label', { for: 'rest' }, 'Songs off between turns'),
-        el('div', { class: 'row' },
-          el('input', {
-            id: 'rest', type: 'number', min: '0', max: '10', value: jam.restSongs,
-            style: { maxWidth: '110px' },
-            onChange: (e) => save({ restSongs: Number(e.target.value) }),
-          }),
-          el('span', { class: 'muted small grow' },
-            'Nobody is called again until this many songs have gone by — unless the chair would otherwise sit empty.'),
-        ),
-      ),
-      el('label', { class: 'toggle' },
-        el('input', {
-          type: 'checkbox',
-          checked: jam.maybeCountsAsAvailable,
-          onChange: (e) => save({ maybeCountsAsAvailable: e.target.checked }),
-        }),
-        el('span', { class: 'toggle__track' }),
-        el('span', { class: 'toggle__text' }, 'Also call people who did not sign up',
-          el('small', {}, 'Off means only people who signed up for the song can be called — the usual choice when the room signs up song by song.')),
-      ),
+      el('div', { class: 'card__head' }, el('h2', {}, 'Song requests')),
       el('label', { class: 'toggle' },
         el('input', {
           type: 'checkbox',
@@ -587,7 +741,18 @@ function settingsTab() {
           onChange: (e) => save({ allowSuggestions: e.target.checked }),
         }),
         el('span', { class: 'toggle__track' }),
-        el('span', { class: 'toggle__text' }, 'Let players suggest songs'),
+        el('span', { class: 'toggle__text' }, 'Let the room request songs'),
+      ),
+      el('label', { class: 'toggle' },
+        el('input', {
+          type: 'checkbox',
+          checked: jam.requireApproval,
+          onChange: (e) => save({ requireApproval: e.target.checked }),
+        }),
+        el('span', { class: 'toggle__track' }),
+        el('span', { class: 'toggle__text' }, 'Approve requests before they go up',
+          el('small', {},
+            'On, a request waits in the Songs tab until you say yes and nobody can sign up for it. Off, it lands straight on the setlist — and anything already waiting is let through.')),
       ),
     ),
 
@@ -596,6 +761,7 @@ function settingsTab() {
       el('div', { class: 'row row--wrap' },
         el('input', {
           id: 'jam-name', type: 'text', class: 'grow', value: jam.name, maxLength: 60,
+          'aria-label': 'Jam name',
           onChange: (e) => save({ name: e.target.value }),
         }),
       ),
@@ -631,6 +797,7 @@ function slotEditor(slots, onSave) {
     el('div', { class: 'row' },
       el('input', {
         type: 'text', value: slot.instrument, class: 'grow',
+        'aria-label': `Instrument for chair ${i + 1}`,
         onChange: (e) => {
           const next = slots.map((s, j) => (j === i ? { ...s, instrument: e.target.value } : s));
           onSave(next);
@@ -638,6 +805,7 @@ function slotEditor(slots, onSave) {
       }),
       el('input', {
         type: 'number', min: '0', max: '12', value: slot.count, style: { maxWidth: '92px' },
+        'aria-label': `How many on ${slot.instrument}`,
         onChange: (e) => {
           const next = slots.map((s, j) => (j === i ? { ...s, count: Number(e.target.value) } : s));
           onSave(next);
@@ -646,6 +814,7 @@ function slotEditor(slots, onSave) {
       el('button', {
         class: 'btn btn--icon btn--ghost',
         title: `Remove ${slot.instrument}`,
+        'aria-label': `Remove the ${slot.instrument} chair`,
         onClick: () => onSave(slots.filter((_, j) => j !== i)),
       }, '×'),
     ),
@@ -668,7 +837,7 @@ function slotEditor(slots, onSave) {
  */
 function callout(current, { closable = false, songs = state.songs, players = state.players } = {}) {
   const song = songs.find((s) => s.id === current.songId) || null;
-  const name = (id) => players.find((p) => p.id === id)?.name || null;
+  const name = (id) => players.find((p) => p.id === id)?.name || 'open';
 
   const view = el('div', { class: `callout${closable ? ' callout--overlay' : ' callout--inline'}` },
     el('div', { class: 'callout__head' },
@@ -679,20 +848,17 @@ function callout(current, { closable = false, songs = state.songs, players = sta
             [song.artist, song.key && `key of ${song.key}`].filter(Boolean).join(' · '))
         : null,
     ),
-    el('div', { class: `callout__grid${current.slots.length > 5 ? ' callout__grid--split' : ''}` },
-      current.slots.map((slot) => {
-        const who = name(slot.playerId);
-        return el('div', {
-          class: `callout__row${who ? '' : ' callout__row--empty'}${slot.resting ? ' callout__row--resting' : ''}`,
-        },
-          el('div', { class: 'callout__inst' }, slot.instrument),
-          el('div', { class: `callout__name${who ? '' : ' callout__name--empty'}` }, who || 'open'),
-        );
-      }),
+    el('div', { class: `callout__grid${current.picks.length > 5 ? ' callout__grid--split' : ''}` },
+      current.picks.map((p) =>
+        el('div', { class: 'callout__row' },
+          el('div', { class: 'callout__inst' }, p.instrument || '—'),
+          el('div', { class: 'callout__name' }, name(p.playerId)),
+        ),
+      ),
     ),
     el('div', { class: 'callout__foot' },
       el('span', {}, `${pluralize(state?.roundIndex ?? 0, 'song')} played`),
-      el('span', {}, `${current.slots.filter((s) => s.playerId).length} on stage`),
+      el('span', {}, `${current.picks.length} on stage`),
     ),
   );
 

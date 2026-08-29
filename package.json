@@ -1,7 +1,7 @@
 {
   "name": "amplify",
   "version": "1.0.0",
-  "description": "Sign-up, consent-aware song matching and a fair rotation queue for open jam nights.",
+  "description": "A sign-up queue for open jam nights. The room puts its names down; the host picks the band.",
   "type": "module",
   "main": "server.js",
   "scripts": {

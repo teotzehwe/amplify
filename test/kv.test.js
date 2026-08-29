@@ -157,8 +157,9 @@ test('a full round trip works against the key-value store', async () => {
     body: { name: 'Remote Drummer', instruments: ['Drums'], stances: { [song.data.id]: 'in' } },
   });
 
-  const lineup = await call('/host/lineup', { method: 'POST', body: { songId: song.data.id }, host: true });
-  assert.ok(lineup.data.slots.some((s) => s.playerId === drummer.data.id));
+  await call('/host/lineup', { method: 'POST', body: { songId: song.data.id }, host: true });
+  const seated = await call('/host/pick', { method: 'POST', body: { playerId: drummer.data.id }, host: true });
+  assert.ok(seated.data.picks.some((p) => p.playerId === drummer.data.id));
 
   await call('/host/commit', { method: 'POST', host: true });
   const { data } = await call('/state');

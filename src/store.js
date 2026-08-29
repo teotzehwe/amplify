@@ -31,12 +31,11 @@ function defaultState(hostKey) {
     jam: {
       name: 'Open Jam Night',
       createdAt: Date.now(),
-      restSongs: 1,
-      maxConsecutive: 1,
-      // Sign-ups drive the night: by default only people who signed up for a
-      // song can be called for it. The host can widen this in Settings.
-      maybeCountsAsAvailable: false,
       allowSuggestions: true,
+      // Requests wait for the host before anyone can sign up for them. On by
+      // default: a song reaching the room unvetted is hard to walk back once
+      // people have started putting their names against it.
+      requireApproval: true,
       slots: [
         { instrument: 'Vocals', count: 1 },
         { instrument: 'Guitar', count: 2 },
@@ -54,6 +53,9 @@ function defaultState(hostKey) {
   };
 }
 
+/** Settings that belonged to the retired auto-scheduler. Dropped on load. */
+const RETIRED_SETTINGS = ['restSongs', 'maxConsecutive', 'maybeCountsAsAvailable'];
+
 /** Fill in anything a hand-edited or older state file is missing. */
 function migrate(state, hostKey) {
   const base = defaultState(hostKey);
@@ -62,20 +64,47 @@ function migrate(state, hostKey) {
   // deploy the generated key is printed to a log nobody reads and stripped from
   // every response, so setting it is the only way to know what it is.
   out.hostToken = hostKey || state.hostToken || base.hostToken;
+  for (const dead of RETIRED_SETTINGS) delete out.jam[dead];
+
   out.players = (state.players || []).map((p) => ({
     limits: {},
     stances: {},
     picks: {},
     instruments: [],
-    unknownStance: 'maybe',
     present: true,
     removed: false,
     notes: '',
     ...p,
     stats: { plays: 0, lastRound: null, streak: 0, byInstrument: {}, ...(p.stats || {}) },
   }));
-  out.songs = (state.songs || []).map((s) => ({ key: '', notes: '', slots: null, ...s }));
+
+  // A song from before approval existed was already visible to the whole room,
+  // so it is approved. Hiding songs people had signed up for would be a worse
+  // surprise than letting a handful through ungated once.
+  out.songs = (state.songs || []).map((s) => ({
+    key: '',
+    notes: '',
+    slots: null,
+    status: 'approved',
+    ...s,
+  }));
+
+  out.current = migrateLineup(out.current);
   return out;
+}
+
+/**
+ * The lineup on deck. Older states held one chair per template slot, filled in
+ * by the scheduler; a lineup is now just the people the host picked, so the
+ * seated names carry over and the empty chairs simply cease to exist.
+ */
+function migrateLineup(current) {
+  if (!current || typeof current !== 'object') return null;
+  if (Array.isArray(current.picks)) return current;
+  const picks = (current.slots || [])
+    .filter((s) => s.playerId)
+    .map((s) => ({ playerId: s.playerId, instrument: s.instrument }));
+  return { songId: current.songId ?? null, picks, createdAt: current.createdAt || Date.now() };
 }
 
 /* ------------------------------------------------------------ file backend */

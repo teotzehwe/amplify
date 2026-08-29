@@ -12,7 +12,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { openStore, newId, DEFAULT_INSTRUMENTS } from './store.js';
-import { buildLineup, commitRound, alternatesFor, songReadiness, STANCES, LEVELS } from './scheduler.js';
+import { commitRound, instrumentFor, mayPlay, signupsFor, STANCES, LEVELS } from './signups.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -113,6 +113,21 @@ function parseStances(input) {
   return out;
 }
 
+/** Songs the room is allowed to sign up for: on the setlist and approved. */
+function playableIds(state) {
+  return new Set(state.songs.filter((s) => s.status === 'approved').map((s) => s.id));
+}
+
+/**
+ * Drop sign-ups pointing at a song that is unknown or still waiting on the
+ * host. Validating here rather than in the UI is the point: a request that
+ * nobody has vetted must not be able to collect names through the API either.
+ */
+function onlyPlayable(state, map) {
+  const allowed = playableIds(state);
+  return Object.fromEntries(Object.entries(map).filter(([songId]) => allowed.has(songId)));
+}
+
 /** Per-song chair requests: { [songId]: 'Guitar' }. */
 function parsePicks(input) {
   const out = {};
@@ -143,36 +158,13 @@ function parseSlots(input, fallback) {
 /* ------------------------------------------------------------------- lineup */
 
 /**
- * Build a lineup and decorate it for the UI: names resolved, and a ready-made
- * list of who else could take each chair so swapping is one tap.
+ * The song currently on deck. A lineup may have no song at all — a free jam —
+ * in which case there is nothing to check sign-ups against and the host picks
+ * from whoever is in the room.
  */
-function computeLineup(state, songId, locks = {}) {
-  const song = state.songs.find((s) => s.id === songId) || null;
-  const lineup = buildLineup({
-    players: state.players,
-    song,
-    settings: state.jam,
-    roundIndex: state.roundIndex,
-    locks,
-  });
-
-  const taken = new Set(lineup.slots.map((s) => s.playerId).filter(Boolean));
-  return {
-    songId: song?.id || null,
-    locks,
-    createdAt: Date.now(),
-    warnings: lineup.warnings,
-    slots: lineup.slots.map((slot) => ({
-      key: slot.key,
-      instrument: slot.instrument,
-      playerId: slot.playerId,
-      locked: slot.locked,
-      blank: slot.blank,
-      resting: slot.resting,
-      reason: slot.reason,
-      alternates: alternatesFor(slot, taken),
-    })),
-  };
+function deckSong(state) {
+  const songId = state.current?.songId;
+  return songId ? state.songs.find((s) => s.id === songId) || null : null;
 }
 
 /* --------------------------------------------------------------------- API */
@@ -193,8 +185,10 @@ route('GET', /^\/api\/state$/, (ctx) => {
     realtime: store.realtime,
     youId: me?.id || null,
     isHost: store.isHost(ctx.hostToken),
-    readiness: Object.fromEntries(
-      store.state.songs.map((s) => [s.id, songReadiness(store.state.players, s, store.state.jam)]),
+    // Who put their name down for each song. This is the whole queue: the
+    // stage display reads it out and the host picks the band from it.
+    signups: Object.fromEntries(
+      store.state.songs.map((s) => [s.id, signupsFor(store.state.players, s)]),
     ),
   };
 });
@@ -209,9 +203,8 @@ route('POST', /^\/api\/join$/, (ctx) => {
     present: true,
     removed: false,
     instruments: parseInstruments(ctx.body.instruments),
-    stances: parseStances(ctx.body.stances),
-    picks: parsePicks(ctx.body.picks),
-    unknownStance: oneOf(ctx.body.unknownStance, STANCES, 'maybe'),
+    stances: onlyPlayable(store.state, parseStances(ctx.body.stances)),
+    picks: onlyPlayable(store.state, parsePicks(ctx.body.picks)),
     limits: parseLimits(ctx.body.limits),
     notes: str(ctx.body.notes, { max: 280 }),
     stats: { plays: 0, lastRound: null, streak: 0, byInstrument: {} },
@@ -232,15 +225,18 @@ route('PATCH', /^\/api\/players\/([\w-]+)$/, (ctx) => {
   store.update(() => {
     if (body.name != null) target.name = str(body.name, { max: 60, field: 'Name', required: true });
     if (body.instruments != null) target.instruments = parseInstruments(body.instruments);
-    if (body.stances != null) target.stances = { ...target.stances, ...parseStances(body.stances) };
-    if (body.picks != null) target.picks = { ...target.picks, ...parsePicks(body.picks) };
+    if (body.stances != null) {
+      target.stances = { ...target.stances, ...onlyPlayable(store.state, parseStances(body.stances)) };
+    }
+    if (body.picks != null) {
+      target.picks = { ...target.picks, ...onlyPlayable(store.state, parsePicks(body.picks)) };
+    }
     // A withdrawal has to be able to clear a song, which a merge cannot express.
     for (const songId of Array.isArray(body.clearSongs) ? body.clearSongs.slice(0, 50) : []) {
       const id = str(songId, { max: 40 });
       delete target.stances[id];
       delete target.picks[id];
     }
-    if (body.unknownStance != null) target.unknownStance = oneOf(body.unknownStance, STANCES, target.unknownStance);
     if (body.limits != null) target.limits = parseLimits(body.limits);
     if (body.notes != null) target.notes = str(body.notes, { max: 280 });
     if (body.present != null) target.present = Boolean(body.present);
@@ -266,6 +262,10 @@ route('POST', /^\/api\/songs$/, (ctx) => {
   if (!isHost && !store.state.jam.allowSuggestions) throw new HttpError(403, 'Suggestions are closed');
   if (!isHost && !me) throw new HttpError(403, 'Sign up before suggesting songs');
 
+  // Anything the host adds is already vetted — they are the one doing the
+  // vetting. A request from the room waits until they have looked at it.
+  const status = isHost || !store.state.jam.requireApproval ? 'approved' : 'pending';
+
   const song = {
     id: newId('s'),
     title: str(ctx.body.title, { max: 80, field: 'Title', required: true }),
@@ -273,11 +273,28 @@ route('POST', /^\/api\/songs$/, (ctx) => {
     key: str(ctx.body.key, { max: 12 }),
     notes: str(ctx.body.notes, { max: 200 }),
     slots: Array.isArray(ctx.body.slots) ? parseSlots(ctx.body.slots, null) : null,
+    status,
     suggestedBy: isHost ? null : me.id,
     addedAt: Date.now(),
   };
   store.update((state) => state.songs.push(song));
-  return { id: song.id };
+  return { id: song.id, status };
+});
+
+/**
+ * Let a request into the setlist. Declining one is a plain DELETE — there is
+ * no third state to hold, and a request the host has said no to should not
+ * linger on their screen asking again.
+ */
+route('POST', /^\/api\/host\/songs\/([\w-]+)\/approve$/, (ctx) => {
+  requireHost(ctx);
+  const song = store.state.songs.find((s) => s.id === ctx.params[0]);
+  if (!song) throw new HttpError(404, 'Song not found');
+  store.update(() => {
+    song.status = 'approved';
+    song.approvedAt = Date.now();
+  });
+  return { ok: true };
 });
 
 route('PATCH', /^\/api\/songs\/([\w-]+)$/, (ctx) => {
@@ -365,42 +382,79 @@ route('PATCH', /^\/api\/host\/settings$/, (ctx) => {
   store.update((state) => {
     const jam = state.jam;
     if (body.name != null) jam.name = str(body.name, { max: 60, fallback: jam.name }) || jam.name;
-    if (body.restSongs != null) jam.restSongs = intOrNull(body.restSongs, { min: 0, max: 10 }) ?? 0;
-    if (body.maxConsecutive != null) jam.maxConsecutive = intOrNull(body.maxConsecutive, { min: 1, max: 10 }) ?? 1;
-    if (body.maybeCountsAsAvailable != null) jam.maybeCountsAsAvailable = Boolean(body.maybeCountsAsAvailable);
     if (body.allowSuggestions != null) jam.allowSuggestions = Boolean(body.allowSuggestions);
     if (body.slots != null) jam.slots = parseSlots(body.slots, jam.slots);
+    if (body.requireApproval != null) {
+      jam.requireApproval = Boolean(body.requireApproval);
+      // Taking the gate down releases whatever was queued behind it. Leaving
+      // those stuck would read as a bug: the host just said they were fine.
+      if (!jam.requireApproval) {
+        for (const song of state.songs) if (song.status === 'pending') song.status = 'approved';
+      }
+    }
   });
   return { ok: true };
 });
 
-/** Draw up a lineup for a song and put it on deck. */
+/** Put a song on deck. It starts with nobody on it — the host fills it in. */
 route('POST', /^\/api\/host\/lineup$/, (ctx) => {
   requireHost(ctx);
   const songId = ctx.body.songId ? str(ctx.body.songId, { max: 40 }) : null;
-  const locks = {};
-  if (ctx.body.locks && typeof ctx.body.locks === 'object') {
-    for (const [key, playerId] of Object.entries(ctx.body.locks).slice(0, 24)) {
-      locks[str(key, { max: 60 })] = playerId ? str(playerId, { max: 40 }) : '';
-    }
+  if (songId) {
+    const song = store.state.songs.find((s) => s.id === songId);
+    if (!song) throw new HttpError(404, 'Song not found');
+    if (song.status !== 'approved') throw bad('That song is still waiting to be approved');
   }
   return store.update((state) => {
-    state.current = computeLineup(state, songId, locks);
+    state.current = { songId, picks: [], createdAt: Date.now() };
     return state.current;
   });
 });
 
-/** Pin, swap, or clear one chair, then rebuild the rest around that choice. */
-route('POST', /^\/api\/host\/assign$/, (ctx) => {
+/**
+ * Put somebody on stage for the song on deck, or move them to another
+ * instrument. Calling it again for the same person replaces their chair
+ * rather than seating them twice.
+ *
+ * This is where the rule the whole tool exists for is kept: a name can only
+ * be seated if its owner signed up for this song. The check lives here and not
+ * only in the console, so that no future screen — and no stray API call — can
+ * volunteer somebody who did not ask to play.
+ */
+route('POST', /^\/api\/host\/pick$/, (ctx) => {
   requireHost(ctx);
   if (!store.state.current) throw bad('No song is on deck');
-  const key = str(ctx.body.slotKey, { max: 60, field: 'slotKey', required: true });
-  const playerId = ctx.body.playerId ? str(ctx.body.playerId, { max: 40 }) : null;
+
+  const playerId = str(ctx.body.playerId, { max: 40, field: 'playerId', required: true });
+  const player = store.state.players.find((p) => p.id === playerId && !p.removed);
+  if (!player) throw new HttpError(404, 'Player not found');
+
+  // A free jam has no song to sign up for, so there the roster is the list.
+  const song = deckSong(store.state);
+  if (song) {
+    const verdict = mayPlay(player, song);
+    if (!verdict.ok) throw new HttpError(403, `${player.name} ${verdict.why}`);
+  }
+
+  const instrument = str(ctx.body.instrument, { max: 40 }) || instrumentFor(player, song);
 
   return store.update((state) => {
-    const locks = { ...state.current.locks };
-    locks[key] = playerId || ''; // '' means "host wants this chair left open"
-    state.current = computeLineup(state, state.current.songId, locks);
+    state.current.picks = [
+      ...state.current.picks.filter((p) => p.playerId !== playerId),
+      { playerId, instrument },
+    ];
+    return state.current;
+  });
+});
+
+/** Take somebody back off the song on deck. */
+route('POST', /^\/api\/host\/unpick$/, (ctx) => {
+  requireHost(ctx);
+  if (!store.state.current) throw bad('No song is on deck');
+  const playerId = str(ctx.body.playerId, { max: 40, field: 'playerId', required: true });
+
+  return store.update((state) => {
+    state.current.picks = state.current.picks.filter((p) => p.playerId !== playerId);
     return state.current;
   });
 });
@@ -410,6 +464,7 @@ route('POST', /^\/api\/host\/commit$/, (ctx) => {
   requireHost(ctx);
   const current = store.state.current;
   if (!current) throw bad('No song is on deck');
+  if (!current.picks.length) throw bad('Nobody is on stage yet — pick who is playing first');
 
   store.update((state) => {
     commitRound(state.players, current, state.roundIndex);
@@ -417,7 +472,7 @@ route('POST', /^\/api\/host\/commit$/, (ctx) => {
       index: state.roundIndex,
       songId: current.songId,
       playedAt: Date.now(),
-      slots: current.slots.map(({ instrument, playerId }) => ({ instrument, playerId })),
+      picks: current.picks.map(({ instrument, playerId }) => ({ instrument, playerId })),
     });
     state.roundIndex += 1;
     state.current = null;

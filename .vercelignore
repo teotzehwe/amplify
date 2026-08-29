@@ -2,6 +2,11 @@
 data/
 *.tmp
 
+# Pulled down by `vercel env pull`: real Redis credentials. Environment
+# variables belong in project settings, never in the upload.
+.env
+.env.*
+
 node_modules/
 test/
 .git/

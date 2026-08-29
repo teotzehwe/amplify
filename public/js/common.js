@@ -161,14 +161,51 @@ export function subscribe(onState) {
 /** Songs already played tonight. A song can be called twice, so this is a set. */
 export const playedSongIds = (state) => new Set(state.rounds.map((r) => r.songId).filter(Boolean));
 
+/** The setlist proper: requests the host has let through. */
+export const approvedSongs = (state) => state.songs.filter((s) => s.status === 'approved');
+
+/** Requests still waiting on the host. Nobody can sign up for these yet. */
+export const pendingSongs = (state) => state.songs.filter((s) => s.status === 'pending');
+
+/** Who put their name down for a song, fewest turns tonight first. */
+export const signupsFor = (state, songId) => state.signups?.[songId] || [];
+
 /**
- * The next song in the queue: the first one not yet played and not already on
- * deck. Queue order is simply the order of `state.songs`, which the host can
- * rearrange.
+ * The next song in the queue: the first approved one not yet played and not
+ * already on deck. Queue order is simply the order of `state.songs`, which the
+ * host can rearrange.
  */
 export function upNext(state) {
   const played = playedSongIds(state);
-  return state.songs.find((s) => !played.has(s.id) && s.id !== state.current?.songId) || null;
+  return approvedSongs(state).find((s) => !played.has(s.id) && s.id !== state.current?.songId) || null;
+}
+
+/**
+ * Sign-ups measured against the band the jam expects. Advisory only — a song
+ * with nobody on bass is still callable, and the host may well know the
+ * guitarist covers it.
+ */
+export function coverageFor(state, song) {
+  const signups = signupsFor(state, song?.id);
+  const counted = new Map();
+  for (const s of signups) {
+    const key = s.instrument.trim().toLowerCase();
+    counted.set(key, (counted.get(key) || 0) + 1);
+  }
+
+  const template = song?.slots?.length ? song.slots : state.jam.slots;
+  const rows = (template || []).filter((s) => s.instrument && s.count > 0).map((slot) => {
+    const key = slot.instrument.trim().toLowerCase();
+    const got = counted.get(key) || 0;
+    counted.delete(key);
+    return { instrument: slot.instrument, want: slot.count, got };
+  });
+
+  for (const [key, got] of counted) {
+    const label = signups.find((s) => s.instrument.trim().toLowerCase() === key)?.instrument || key;
+    rows.push({ instrument: label, want: 0, got });
+  }
+  return rows;
 }
 
 export function logoMark() {

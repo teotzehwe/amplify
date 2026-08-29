@@ -123,9 +123,12 @@ test('joining requires a name and at least one instrument', async () => {
 
 test('host endpoints reject a missing or wrong key', async () => {
   assert.equal((await call('/host/lineup', { method: 'POST', body: {} })).status, 403);
-  assert.equal((await call('/host/settings', { method: 'PATCH', body: { restSongs: 4 } })).status, 403);
+  assert.equal((await call('/host/pick', { method: 'POST', body: { playerId: 'u1' } })).status, 403);
+  assert.equal((await call('/host/unpick', { method: 'POST', body: { playerId: 'u1' } })).status, 403);
+  assert.equal((await call('/host/settings', { method: 'PATCH', body: { requireApproval: true } })).status, 403);
   assert.equal((await call('/host/reset', { method: 'POST', body: { mode: 'night' } })).status, 403);
   assert.equal((await call('/host/auth', { method: 'POST', body: { token: 'nope' } })).status, 403);
+  assert.equal((await call('/host/songs/ghost/approve', { method: 'POST' })).status, 403);
 });
 
 test('a player may edit their own sign-up but not anybody else’s', async () => {
@@ -148,19 +151,23 @@ test('the host can edit anyone', async () => {
   assert.equal(res.status, 200);
 });
 
-test('a full round trip: songs, lineup, and committed turns', async () => {
+test('a full round trip: a song, sign-ups, a hand-picked band, committed turns', async () => {
   await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
 
   const song = await call('/songs', { method: 'POST', body: { title: 'Test Song' }, host: true });
   assert.equal(song.status, 200);
+  assert.equal(song.data.status, 'approved', 'the host is the one doing the vetting');
 
-  // Sign-ups drive the lineup, so both players sign up for this song.
   const drummer = await joinAs('Drummer', ['Drums'], { stances: { [song.data.id]: 'in' } });
-  await joinAs('Guitarist', ['Guitar'], { stances: { [song.data.id]: 'in' } });
+  const guitarist = await joinAs('Guitarist', ['Guitar'], { stances: { [song.data.id]: 'in' } });
 
   const lineup = await call('/host/lineup', { method: 'POST', body: { songId: song.data.id }, host: true });
   assert.equal(lineup.status, 200);
-  assert.ok(lineup.data.slots.some((s) => s.playerId === drummer.data.id), 'the drummer should be seated');
+  assert.deepEqual(lineup.data.picks, [], 'a lineup starts empty — nothing is chosen for the host');
+
+  const seated = await call('/host/pick', { method: 'POST', body: { playerId: drummer.data.id }, host: true });
+  assert.equal(seated.status, 200);
+  assert.deepEqual(seated.data.picks, [{ playerId: drummer.data.id, instrument: 'Drums' }]);
 
   const commit = await call('/host/commit', { method: 'POST', host: true });
   assert.equal(commit.status, 200);
@@ -169,26 +176,65 @@ test('a full round trip: songs, lineup, and committed turns', async () => {
   assert.equal(data.roundIndex, 1);
   assert.equal(data.current, null);
   assert.equal(data.players.find((p) => p.id === drummer.data.id).stats.plays, 1);
+  assert.equal(
+    data.players.find((p) => p.id === guitarist.data.id).stats.plays, 0,
+    'signing up is not the same as being called — the host picked one of the two',
+  );
 });
 
-test('a song marked "out" keeps that player off the lineup over the wire', async () => {
+test('the API refuses to seat anybody who did not sign up', async () => {
   await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
   const song = await call('/songs', { method: 'POST', body: { title: 'Not For Me' }, host: true });
 
-  await joinAs('Unwilling', ['Drums'], { stances: { [song.data.id]: 'out' } });
+  const silent = await joinAs('Never Asked', ['Drums']);
+  const withdrew = await joinAs('Withdrawn', ['Drums'], { stances: { [song.data.id]: 'out' } });
 
-  const lineup = await call('/host/lineup', { method: 'POST', body: { songId: song.data.id }, host: true });
-  const drums = lineup.data.slots.find((s) => s.instrument === 'Drums');
-  assert.equal(drums.playerId, null);
-  assert.match(lineup.data.warnings.join(' '), /No one available on Drums/);
+  await call('/host/lineup', { method: 'POST', body: { songId: song.data.id }, host: true });
+
+  for (const who of [silent, withdrew]) {
+    const res = await call('/host/pick', { method: 'POST', body: { playerId: who.data.id }, host: true });
+    assert.equal(res.status, 403, 'a name only goes up if its owner put it there');
+    assert.match(res.data.error, /did not sign up/);
+  }
+
+  const { data } = await call('/state');
+  assert.deepEqual(data.current.picks, [], 'the chair stays open rather than being filled');
+});
+
+test('picking someone twice moves their instrument instead of seating them twice', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const song = await call('/songs', { method: 'POST', body: { title: 'Swap' }, host: true });
+  const p = await joinAs('Multi', ['Guitar', 'Keys'], { stances: { [song.data.id]: 'in' } });
+
+  await call('/host/lineup', { method: 'POST', body: { songId: song.data.id }, host: true });
+  await call('/host/pick', { method: 'POST', body: { playerId: p.data.id }, host: true });
+  const moved = await call('/host/pick', {
+    method: 'POST', body: { playerId: p.data.id, instrument: 'Keys' }, host: true,
+  });
+
+  assert.deepEqual(moved.data.picks, [{ playerId: p.data.id, instrument: 'Keys' }]);
+
+  const off = await call('/host/unpick', { method: 'POST', body: { playerId: p.data.id }, host: true });
+  assert.deepEqual(off.data.picks, []);
+});
+
+test('a song nobody is on cannot be marked played', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const song = await call('/songs', { method: 'POST', body: { title: 'Empty' }, host: true });
+  await call('/host/lineup', { method: 'POST', body: { songId: song.data.id }, host: true });
+
+  const res = await call('/host/commit', { method: 'POST', host: true });
+  assert.equal(res.status, 400);
+  assert.match(res.data.error, /Nobody is on stage/);
 });
 
 test('skipping a song leaves every turn count untouched', async () => {
   await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
   const song = await call('/songs', { method: 'POST', body: { title: 'Skipped' }, host: true });
-  const p = await joinAs('Skipper', ['Guitar']);
+  const p = await joinAs('Skipper', ['Guitar'], { stances: { [song.data.id]: 'in' } });
 
   await call('/host/lineup', { method: 'POST', body: { songId: song.data.id }, host: true });
+  await call('/host/pick', { method: 'POST', body: { playerId: p.data.id }, host: true });
   await call('/host/skip', { method: 'POST', host: true });
 
   const { data } = await call('/state');
@@ -213,6 +259,94 @@ test('a signed-in player can suggest songs, with no limit on how many', async ()
   const { data } = await call('/state');
   assert.equal(data.songs.length, 25);
   assert.ok(data.songs.every((s) => s.suggestedBy === p.data.id), 'each is credited to the suggester');
+  assert.ok(data.songs.every((s) => s.status === 'pending'), 'and none of them reaches the room unvetted');
+});
+
+/* ------------------------------------------------------------- vetting */
+
+test('a request waits for the host, and nobody can sign up for it meanwhile', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const asker = await joinAs('Asker', ['Guitar']);
+  const fan = await joinAs('Fan', ['Bass']);
+
+  const req = await call('/songs', { method: 'POST', body: { title: 'Unvetted' }, player: asker.data.token });
+  assert.equal(req.data.status, 'pending');
+
+  // The sign-up is accepted as a request but silently drops the unvetted song,
+  // so a pending title cannot quietly collect names through the API.
+  await call(`/players/${fan.data.id}`, {
+    method: 'PATCH', body: { stances: { [req.data.id]: 'in' } }, player: fan.data.token,
+  });
+
+  const { data } = await call('/state');
+  assert.deepEqual(data.players.find((p) => p.id === fan.data.id).stances, {});
+  assert.deepEqual(data.signups[req.data.id], []);
+
+  // Nor can the host put it on deck by mistake.
+  const deck = await call('/host/lineup', { method: 'POST', body: { songId: req.data.id }, host: true });
+  assert.equal(deck.status, 400);
+  assert.match(deck.data.error, /waiting to be approved/);
+});
+
+test('approving a request lets it onto the setlist and collect sign-ups', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const asker = await joinAs('Asker', ['Guitar']);
+  const fan = await joinAs('Fan', ['Bass']);
+
+  const req = await call('/songs', { method: 'POST', body: { title: 'Vetted' }, player: asker.data.token });
+  const ok = await call(`/host/songs/${req.data.id}/approve`, { method: 'POST', host: true });
+  assert.equal(ok.status, 200);
+
+  await call(`/players/${fan.data.id}`, {
+    method: 'PATCH',
+    body: { stances: { [req.data.id]: 'in' }, picks: { [req.data.id]: 'Bass' } },
+    player: fan.data.token,
+  });
+
+  const { data } = await call('/state');
+  assert.equal(data.songs.find((s) => s.id === req.data.id).status, 'approved');
+  assert.deepEqual(data.signups[req.data.id].map((s) => s.name), ['Fan']);
+  assert.equal(data.signups[req.data.id][0].instrument, 'Bass');
+});
+
+test('joining with a sign-up for an unapproved song does not smuggle one in', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const asker = await joinAs('Asker', ['Guitar']);
+  const req = await call('/songs', { method: 'POST', body: { title: 'Sneaky' }, player: asker.data.token });
+
+  const sneak = await joinAs('Sneak', ['Bass'], { stances: { [req.data.id]: 'in' } });
+
+  const { data } = await call('/state');
+  assert.deepEqual(data.players.find((p) => p.id === sneak.data.id).stances, {});
+});
+
+test('declining a request removes it outright', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const asker = await joinAs('Asker', ['Guitar']);
+  const req = await call('/songs', { method: 'POST', body: { title: 'Declined' }, player: asker.data.token });
+
+  assert.equal((await call(`/songs/${req.data.id}`, { method: 'DELETE', host: true })).status, 200);
+  assert.equal((await call('/state')).data.songs.length, 0);
+  assert.equal((await call('/host/songs/ghost/approve', { method: 'POST', host: true })).status, 404);
+});
+
+test('turning approval off releases everything already waiting', async () => {
+  await call('/host/reset', { method: 'POST', body: { mode: 'night' }, host: true });
+  const asker = await joinAs('Asker', ['Guitar']);
+  await call('/songs', { method: 'POST', body: { title: 'Queued A' }, player: asker.data.token });
+  await call('/songs', { method: 'POST', body: { title: 'Queued B' }, player: asker.data.token });
+
+  await call('/host/settings', { method: 'PATCH', body: { requireApproval: false }, host: true });
+  let { data } = await call('/state');
+  assert.ok(data.songs.every((s) => s.status === 'approved'), 'nothing stays stuck behind a gate that is gone');
+
+  // And a new one goes straight up while the gate is down.
+  const direct = await call('/songs', { method: 'POST', body: { title: 'Straight up' }, player: asker.data.token });
+  assert.equal(direct.data.status, 'approved');
+
+  await call('/host/settings', { method: 'PATCH', body: { requireApproval: true }, host: true });
+  ({ data } = await call('/state'));
+  assert.ok(data.songs.every((s) => s.status === 'approved'), 'putting the gate back does not retract what is up');
 });
 
 test('suggestions are refused when the host closes them', async () => {
@@ -254,6 +388,7 @@ test('a suggestion cannot be pulled once someone else has signed up for it', asy
   const fan = await joinAs('Fan', ['Bass']);
 
   const song = await call('/songs', { method: 'POST', body: { title: 'Popular' }, player: mine.data.token });
+  await call(`/host/songs/${song.data.id}/approve`, { method: 'POST', host: true });
   await call(`/players/${fan.data.id}`, {
     method: 'PATCH', body: { stances: { [song.data.id]: 'in' } }, player: fan.data.token,
   });
