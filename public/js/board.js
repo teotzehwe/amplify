@@ -37,7 +37,7 @@ function board(state) {
     el('div', { class: 'callout__foot' },
       el('span', {}, state.jam.name),
       el('span', {}, `${pluralize(state.roundIndex, 'song')} played`),
-      el('span', {}, `${state.players.filter((p) => p.present).length} musicians here`),
+      el('span', {}, `${pluralize(state.players.filter((p) => p.present).length, 'musician')} here`),
     ),
   );
 }
