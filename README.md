@@ -1,11 +1,18 @@
 # Amplify
 
-Sign-ups, comfort levels and a fair rotation for open jam nights.
+A sign-up queue for open jam nights.
 
-People add their name and instruments once, then sign up for songs one at a
-time as the setlist fills in. Amplify builds the band for each song from
-whoever signed up — spreading turns around, keeping anyone who has not played
-yet at the front of the queue, and never calling someone who did not sign up.
+People add their name and instruments once, then put their name down for songs
+one at a time as the setlist fills in. Every sign-up goes up on the stage
+screen, grouped by instrument, and **the host picks the band from that list**.
+Amplify keeps the queue and shows who has played what; it does not choose
+anybody.
+
+That is deliberate. An earlier version built the lineup itself, and it did not
+survive a real jam night — the room could not see why it chose what it chose,
+and a host who disagreed had to fight the tool instead of running the night. A
+person with the room in front of them is better at fair than a ranking function
+is, so the tool's job is to give them the list and get out of the way.
 
 ```bash
 node server.js
@@ -30,13 +37,13 @@ console.
 
 | Screen | Who it is for | What it does |
 | --- | --- | --- |
-| `/` | Musicians, on their phones | Sign in, sign up for songs, set limits, see when you are up |
-| `/host` | Whoever is running the night | Draw lineups, swap chairs, call the song, log it |
-| `/board` | A TV or spare laptop | Sign-up code, **Now** and **Next**, and the lineup in room-sized type |
+| `/` | Musicians, on their phones | Sign in, sign up for songs, request songs |
+| `/host` | Whoever is running the night | Vet requests, pick the band by hand, call the song, log it |
+| `/board` | A TV or spare laptop | Sign-up code, **Now** and **Next**, and who has signed up, in room-sized type |
 
-Everything updates live. A song added on the host console appears on every
-phone immediately; a musician marking themselves on a break drops out of the
-next lineup without anyone saying a word.
+Everything updates live. A name added on a phone appears on the stage screen
+immediately; a musician marking themselves on a break shows as struck through
+on the sheet without anyone saying a word.
 
 ## Signing up, one song at a time
 
@@ -46,81 +53,74 @@ its own **Sign up** button on your phone — one song per sign-up, as many songs
 as you like, whenever you like. New songs appear the moment the host adds them.
 
 If you play more than one instrument, each sign-up asks which one you want for
-*that* song. Sign up for the ballad on keys and the blues on guitar; Amplify
-seats you where you asked. **Withdraw** takes you off a single song and leaves
-your other sign-ups alone.
+*that* song. Sign up for the ballad on keys and the blues on guitar; that is
+what goes up beside your name. **Withdraw** takes you off a single song and
+leaves your other sign-ups alone.
 
-**Not signing up is a complete answer.** By default nobody is called for a song
-they did not sign up for — not to fill an empty chair, not to staff a half-empty
-band, not by the host pinning them into a slot by hand. If a song cannot be
-staffed, Amplify says so and leaves the chair open rather than putting someone
-on stage who did not put themselves there.
+**Not signing up is a complete answer.** Nobody can be called for a song they
+did not sign up for — the host's list *is* the sign-up sheet, and the server
+refuses any pick that is not on it. If a song cannot be staffed, the chair stays
+open rather than somebody being put on stage who did not put themselves there.
 
-Anyone signed in can also **suggest songs**, as many as they want. A suggestion
-appears on every other phone immediately, credited to whoever added it, and
-everyone can sign up for it like any other song. You can take back your own
-suggestion until somebody else has signed up for it — after that it is the
-host's to remove, so nobody loses a song they were counting on.
+One thing people set for themselves: **on a break**. You stay on the sheet and
+are shown struck through, so the host can see you are on the list but not in the
+room this minute. It does not block a pick — it is shown to the host beside your
+name, because the person weighing it is the one running the room.
 
-A lineup is a snapshot. If somebody withdraws or goes on a break after it was
-drawn, the host's call sheet flags it in red before the names get read out.
+## Requesting a song
 
-There are two more limits people set for themselves:
+Anyone signed in can **request songs**, as many as they want. A request does not
+go straight onto the setlist: it waits in the host's **Songs** tab until they
+approve it, and nobody can sign up for it in the meantime. The person who asked
+sees it on their own phone marked *Pending*, so it never looks lost.
 
-- **A cap on turns** ("three songs and I'm done") — a hard stop.
-- **On a break** — keeps their place in the queue without being called.
+This is enforced server-side, not just hidden in the UI — a sign-up naming an
+unapproved song is dropped, and an unapproved song cannot be put on deck.
 
-## How the queue decides
+Approving puts it on the setlist and it behaves like any other song from then
+on. Declining removes it. You can take back your own request any time before
+it is approved, and your own suggestion afterwards until somebody else has
+signed up for it — after that it is the host's to remove, so nobody loses a song
+they were counting on.
 
-For each chair, everyone who signed up is ranked:
+Turn all of this off with **Approve requests before they go up** if you trust
+the room; anything already waiting is let through when you do.
 
-1. **Rested before tired** — anyone still inside their rest gap is a last resort.
-2. **Fewest turns tonight** — this is what pulls people who have not played to
-   the front, and it is why someone arriving at 10pm is called next.
-3. **Signed up before not**.
-4. **The chair they asked for**, ahead of one they did not.
-5. **Longest wait** since they last played, then whoever arrived first.
+## Picking a band
 
-Three more things happen before the lineup is final:
+The host picks. Amplify shows the sign-up sheet and what it knows about each
+person, and stays out of it.
 
-- **Requested chairs are honoured first.** If you signed up for a song on keys,
-  you get keys — an earlier slot in the template cannot claim you for vocals
-  and quietly lose your request.
-- **Scarce chairs are filled next.** The only drummer in the room does not get
-  spent on a guitar seat that four other people could take.
-- **One repair pass.** If a chair ends up empty but someone already seated could
-  cover it — and their own chair has a backup — they are swapped across.
+1. **Now** → **Put on deck**. Each song shows how many people have signed up.
+   The **Songs** tab is the queue: reorder with the arrows, or **Play next** to
+   jump a song to the front. The top song not yet played is marked *up next*,
+   which is what the stage display shows as **Next**.
+2. **Tap names to put them on.** The sheet leads with whoever has waited longest
+   — fewest turns tonight, then longest since they last played — and each row
+   carries what you need to be fair with it: turns so far, *played the last
+   song*, *on a break*. None of that stops you picking anybody. It is ordering
+   and information, not a decision.
+3. **Watch the coverage strip** — `Vocals 1/1 · Guitar 1/2 · Bass 0/1`. It
+   counts sign-ups against the band you set in Settings, and it is advice only.
+   A song with nobody on bass is still perfectly callable; you may well know the
+   guitarist covers it.
+4. **Call it out** — full-screen names, readable from across the room.
+5. **Played ✓** logs a turn for everyone on stage. **Cancel** clears the deck
+   without counting anything.
 
-The rest gap is the one rule that bends. If a chair would otherwise sit empty,
-Amplify calls someone back early, flags the row *no rest*, and writes the reason
-next to their name ("Doubling up — played the last song, nobody else free").
-Every pick shows its reasoning, so the host can always answer "why them?".
+Turn counts are what you read to judge fairness, so log songs as they happen.
 
-## Running a song
-
-1. **Now** → pick a song. Each one shows who is in, who is out, and whether the
-   band can actually be staffed before you call it. The **Songs** tab is the
-   queue: reorder it with the arrows, or hit **Play next** to jump a song to
-   the front. The top song not yet played is marked *up next*, and that is what
-   the stage display shows as **Next**.
-2. **Draw lineup.** Swap anyone from the dropdown beside their chair, or leave a
-   chair open. Manual picks survive a redraw; *Clear my picks* starts over.
-3. **Call it out** — full-screen names, readable from across the room.
-4. **Played ✓** logs the turns and moves everyone on stage to the back of the
-   queue. **Cancel** drops the lineup without counting anything.
-
-Turn counts are what drive fairness, so log songs as they happen.
+A pick is a snapshot. If somebody withdraws or goes on a break after you seated
+them, the row flags it before the names get read out — they are not silently
+dropped, because vanishing mid-selection is its own surprise.
 
 ## Settings
 
-- **The band** — which chairs to fill (2 guitars, 1 bass, 1 drums…). Songs can
-  override the template.
-- **Songs off between turns** — the rest gap. Default 1.
-- **Also call people who did not sign up** — off by default, which is what makes
-  sign-ups mean something. Turn it on for a loose night where you would rather
-  fill every chair than wait for sign-ups.
-- **Let players suggest songs** — on by default. Anyone signed in can add as
-  many as they like from their phone, and suggestions show who added them.
+- **The band** — which chairs you usually want filled (2 guitars, 1 bass, 1
+  drums…). A readout on the sign-up sheet, not a limit. Songs can override it.
+- **Let the room request songs** — on by default.
+- **Approve requests before they go up** — on by default. Off means requests
+  land straight on the setlist.
 - **Reset turn counts** for a second set, or **clear the night** entirely.
 
 ## Going live on Vercel
@@ -191,12 +191,12 @@ Useful environment variables:
 npm test
 ```
 
-Covers the rotation engine directly — consent, rest gaps, scarcity, the repair
-pass, personal caps, and turn spread across a simulated night — plus API-level
-tests that boot the real server and check auth, validation and a full round
-trip. The key-value backend is tested against a stand-in that speaks the same
-REST protocol, including eight people signing up in the same instant, so the
-hosted path is exercised without needing an account.
+Covers the sign-up reader directly — what counts as a sign-up, that nothing
+reads silence as consent, coverage, and turn counts — plus API-level tests that
+boot the real server and check auth, validation, vetting and a full round trip.
+The key-value backend is tested against a stand-in that speaks the same REST
+protocol, including eight people signing up in the same instant, so the hosted
+path is exercised without needing an account.
 
 ## Layout
 
@@ -204,8 +204,23 @@ hosted path is exercised without needing an account.
 server.js            local listener — `node server.js`
 api/[...path].js     the same app as a serverless function
 src/app.js           routing, validation, the REST API
-src/scheduler.js     the rotation engine — pure functions, no I/O
+src/signups.js       who signed up and who may be picked — pure, no I/O
 src/store.js         file and key-value backends, per-request isolation
 public/js/qr.js      QR encoder, so the sign-up code works with the wifi down
 public/              the three screens; no build step, no framework
+DESIGN.md            tokens, component rules, the a11y sweep, QA checklist
 ```
+
+## Design
+
+`DESIGN.md` carries the visual system: the palette and why text never uses a raw
+brand hue, the 12/14/16/20/24/32 type scale, the 44px touch floor, component
+states, and a console sweep that checks contrast and target sizes on any screen.
+Read it before changing anything visual — a restyle has already silently broken
+a contrast token once.
+
+Type is matched to Trackr: a single Apple-system stack (`-apple-system` →
+SF Pro on Apple hardware) for both body and headings, with hierarchy carried by
+weight and size rather than a second typeface. Everything in the stack is a
+system font, so nothing here needs the network — which matters, because the app
+has to work with the venue wifi down.
